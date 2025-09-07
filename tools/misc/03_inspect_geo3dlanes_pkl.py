@@ -1,6 +1,6 @@
 import pickle as pkl
 
-pkl_pth = "../../data/Geo3DLanes/geo3dlanes.pkl"
+pkl_pth = "../../data/Geo3DLanes/geo3dlanes_train.pkl"
 
 with open(pkl_pth, 'rb') as ifile:
     data = pkl.load(ifile)
