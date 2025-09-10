@@ -13,6 +13,12 @@ def parse_sample(frame_id, im_pth, lane_ann_data, scene, obj_ann_data, pc_pth):
             pose = frame['pose']
             break
 
+    instances = list()
+    for lane in lane_ann_data['lanes']:
+        label = 0 # dummy label [0]. ONCE3DLanes provide no information about lane classes
+        ignore_flag = False if len(lane) > 2 else True 
+        instances.append({'lane': lane, 'label': label, 'ignore_flag': ignore_flag})
+
     sample_data = {
         'scene_id': scene,
         'frame_id': frame_id,
@@ -24,11 +30,7 @@ def parse_sample(frame_id, im_pth, lane_ann_data, scene, obj_ann_data, pc_pth):
         'lane_ann_pth': lane_ann_data['__path__'], 
         'obj_ann_pth': obj_ann_data['__path__'],
         'pc_pth': pc_pth,
-        'instances': {
-            'lane_num': lane_ann_data['lane_num'],
-            'lane_label': 0,
-            'lanes': lane_ann_data['lanes']
-        }
+        'instances': instances,
     }
     return sample_data
 
