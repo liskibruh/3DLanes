@@ -62,6 +62,8 @@ def create_pkl(scene: str, split_pth: str):
 
         # parse sample with preloaded JSONs
         sample_data = parse_sample(s, im_pth, lane_ann_data, scene, obj_ann_data, pc_pth)
+        sample_data['weather'] = obj_ann_data['meta_info']['weather']
+        sample_data['period'] = obj_ann_data['meta_info']['period']
         out_list.append(sample_data)
 
     return {'data_list': out_list}
