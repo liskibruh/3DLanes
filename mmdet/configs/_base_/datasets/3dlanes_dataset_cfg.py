@@ -3,20 +3,27 @@ dataset_type = 'Geo3DLanesDataset'
 classes = ['lane']
 lidar_sweeps = 2
 backend_args = None
-img_scale = (1920, 1080)
+img_scale = (1080, 576)# (1920, 1080)
 
 train_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Geo3DLanes/geo3dlanes_train.pkl'
 val_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Geo3DLanes/geo3dlanes_train.pkl'
 
 train_al_pipeline = [
-    dict(type="Alaug")
+    dict(type="Compose"),
+    dict(type="Resize", scale=img_scale),
+    dict(type="RandomCenterCrop"),
+    dict(type="HorizontalFlip"),
+    dict(type="Mirror"),
+    dict(type="Perspective")
 ]
 
 train_pipeline = [
     dict(type="LoadImageFromFile"), 
-    # dict(type="LoadLaneAnnotations"),
     # dict(type="Normalize", mean=[], std=[]),
-    dict(type="Resize", scale=img_scale)
+    # dict(type="LoadLaneMasks"), # interpolation -> bitmaps -> color maps
+    # dict(type="DepthCompltetion") #
+    dict(type="Resize", scale=img_scale, keep_ratio=True)
+    # dict(type="Alaug", pipeline=train_al_pipeline) #
     ]
 val_pipeline = [dict(type='LoadImageFromFile'),] # dummy transform for now
 
