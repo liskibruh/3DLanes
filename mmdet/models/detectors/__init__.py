@@ -1,4 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import importlib
+
 from .atss import ATSS
 from .autoassign import AutoAssign
 from .base import BaseDetector
@@ -58,7 +60,7 @@ from .yolact import YOLACT
 from .yolo import YOLOV3
 from .yolof import YOLOF
 from .yolox import YOLOX
-from .ThreeD_Lanes import ThreeD_Lanes
+from ._3DLanes import _3DLanes
 
 __all__ = [
     'ATSS', 'BaseDetector', 'SingleStageDetector', 'TwoStageDetector', 'RPN',
@@ -72,5 +74,5 @@ __all__ = [
     'MaskFormer', 'DDOD', 'Mask2Former', 'SemiBaseDetector', 'SoftTeacher',
     'RTMDet', 'Detectron2Wrapper', 'CrowdDet', 'CondInst', 'BoxInst',
     'DetectionTransformer', 'ConditionalDETR', 'DINO', 'DABDETR', 'GLIP',
-    'DDQDETR', 'GroundingDINO', 'ThreeD_Lanes'
+    'DDQDETR', 'GroundingDINO', '_3DLanes'
 ]

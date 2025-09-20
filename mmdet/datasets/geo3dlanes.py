@@ -26,7 +26,8 @@ class Geo3DLanesDataset(BaseDetDataset):
     def parse_data_info(self, raw_data_info):
         data_info = raw_data_info.copy()
         data_info.pop('calib') # same for all samples, added to METAINFO
-        data_info.pop('lane_ann_pth') # not required atm
+        # data_info.pop('lane_ann_pth') # not required atm
         data_info.pop('obj_ann_pth') # not required atm
+        data_info['metainfo'] = self.metainfo
         return data_info
         

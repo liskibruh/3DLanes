@@ -35,6 +35,7 @@ from .wider_face import WIDERFaceDataset
 from .xml_style import XMLDataset
 from .youtube_vis_dataset import YouTubeVISDataset
 from .geo3dlanes import Geo3DLanesDataset
+from .apollo3d import Apollo3D
 
 __all__ = [
     'XMLDataset', 'CocoDataset', 'DeepFashionDataset', 'VOCDataset',
@@ -50,5 +51,6 @@ __all__ = [
     'BaseSegDataset', 'ADE20KSegDataset', 'CocoSegDataset',
     'ADE20KInstanceDataset', 'iSAIDDataset', 'V3DetDataset', 'ConcatDataset',
     'ODVGDataset', 'MDETRStyleRefCocoDataset', 'DODDataset',
-    'CustomSampleSizeSampler', 'Flickr30kDataset', 'Geo3DLanesDataset'
+    'CustomSampleSizeSampler', 'Flickr30kDataset', 'Geo3DLanesDataset',
+    'Apollo3D',
 ]
