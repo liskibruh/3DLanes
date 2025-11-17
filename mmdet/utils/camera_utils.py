@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
 # define the full kernels if not defined
+FULL_KERNEL_3 = np.ones((3, 3), dtype=np.uint8)
 FULL_KERNEL_5 = np.ones((5, 5), dtype=np.uint8)
 FULL_KERNEL_7 = np.ones((7, 7), dtype=np.uint8)
 FULL_KERNEL_31 = np.ones((31, 31), dtype=np.uint8)
@@ -21,6 +22,14 @@ DIAMOND_KERNEL_5 = np.array(
         [1, 1, 1, 1, 1],
         [0, 1, 1, 1, 0],
         [0, 0, 1, 0, 0],
+    ], dtype=np.uint8)
+
+# 3x3 diamond kernel
+DIAMOND_KERNEL_5 = np.array(
+    [
+        [0, 1, 0],
+        [1, 1, 1],
+        [0, 1, 0],
     ], dtype=np.uint8)
 
 colors = [[1, 0, 0],  # red
@@ -44,65 +53,101 @@ def adjust_intrinsic(K, ori_shape, new_shape, crop_offset=(0,0)):
     return K_adj
 
 
-def fill_in_fast(depth_map, max_depth=100.0, custom_kernel=DIAMOND_KERNEL_5,
+def fill_in_fast_old(depth_map, max_depth=100.0, custom_kernel=DIAMOND_KERNEL_5,
                  extrapolate=False, blur_type='bilateral', mode='elevation'):
-    """Fast, in-place depth completion for a sparse depth map.
+    # Initial valid pixels in elevation range
+    valid_pixels = (depth_map >= -20) & (depth_map <= 20)
 
-    Args:
-        depth_map: A 2D numpy array of shape (H, W) containing depth values 
-                   at sparse locations (non-zero) and zeros elsewhere.
-        max_depth: The maximum depth value used for inversion.
-        custom_kernel: The kernel used for the initial dilation.
-        extrapolate: If True, extrapolate depth values to the top of the image.
-        blur_type: Either 'bilateral' or 'gaussian'. Bilateral preserves edges.
-        mode: Either 'elevation' or 'depth'. 'depth' inverts back to the original depth scale, 'elevation' returns depth map as is.
+    # Apply inversion for depth if needed
+    # depth_map[valid_pixels] = max_depth - depth_map[valid_pixels]
 
-    Returns:
-        depth_map: A dense depth map as a 2D numpy array.
-    """
-    # Inversion: Convert depths so that smaller (closer) depths become larger.
-    valid_pixels = (depth_map > 0.1)
-    depth_map[valid_pixels] = max_depth - depth_map[valid_pixels]
+    # --- Initialize bin_mask with valid pixels ---
+    bin_mask = valid_pixels.astype(np.uint8)
 
-    # Dilate with custom (diamond) kernel to spread valid depths.
+    # Dilate with custom (diamond) kernel to spread valid depths and mask
     depth_map = cv2.dilate(depth_map, custom_kernel)
+    bin_mask = cv2.dilate(bin_mask, custom_kernel)
 
-    # Hole closing using a full 5x5 kernel.
-    depth_map = cv2.morphologyEx(depth_map, cv2.MORPH_CLOSE, FULL_KERNEL_5)
+    # Hole closing using a full 3x3 kernel
+    depth_map = cv2.morphologyEx(depth_map, cv2.MORPH_CLOSE, FULL_KERNEL_3)
+    bin_mask = cv2.morphologyEx(bin_mask, cv2.MORPH_CLOSE, FULL_KERNEL_3)
 
-    # Fill empty (invalid) pixels with dilated values.
-    empty_pixels = (depth_map < 0.1)
-    dilated = cv2.dilate(depth_map, FULL_KERNEL_7)
+    # Fill empty (invalid) pixels with dilated values
+    empty_pixels = (depth_map < -20) | (depth_map > 20)
+    dilated = cv2.dilate(depth_map, FULL_KERNEL_3)
     depth_map[empty_pixels] = dilated[empty_pixels]
+    bin_mask[empty_pixels] = 1
 
-    # Optionally extrapolate depth upward.
+    # Optionally extrapolate depth upward
     if extrapolate:
-        top_row_pixels = np.argmax(depth_map > 0.1, axis=0)
+        top_row_pixels = np.argmax(depth_map >= -20, axis=0)
         top_pixel_values = depth_map[top_row_pixels, range(depth_map.shape[1])]
         for pixel_col_idx in range(depth_map.shape[1]):
             depth_map[0:top_row_pixels[pixel_col_idx], pixel_col_idx] = top_pixel_values[pixel_col_idx]
-        empty_pixels = (depth_map < 0.1)
+            bin_mask[0:top_row_pixels[pixel_col_idx], pixel_col_idx] = 1
+        empty_pixels = (depth_map < -20) | (depth_map > 20)
         dilated = cv2.dilate(depth_map, FULL_KERNEL_31)
         depth_map[empty_pixels] = dilated[empty_pixels]
+        bin_mask[empty_pixels] = 1
 
-    # Apply median blur to smooth out noise.
+    # Apply median blur to smooth out noise
     depth_map = cv2.medianBlur(depth_map, 5)
 
-    # Apply bilateral or Gaussian blur.
+    # Apply bilateral or Gaussian blur (don’t blur bin_mask!)
     if blur_type == 'bilateral':
         depth_map = cv2.bilateralFilter(depth_map, 5, 1.5, 2.0)
     elif blur_type == 'gaussian':
-        valid_pixels = (depth_map > 0.1)
+        valid_pixels = (depth_map >= -20) & (depth_map <= 20)
         blurred = cv2.GaussianBlur(depth_map, (5, 5), 0)
         depth_map[valid_pixels] = blurred[valid_pixels]
 
-    if mode=='elevation':
-        return depth_map
-    # Invert back to original scale.
-    valid_pixels = (depth_map > 0.1)
-    depth_map[valid_pixels] = max_depth - depth_map[valid_pixels]
+    # Invert back to original scale if depth mode
+    if mode == 'depth':
+        valid_pixels = (bin_mask > 0)
+        depth_map[valid_pixels] = max_depth - depth_map[valid_pixels]
 
-    return depth_map
+    # Ensure binary mask is bool
+    bin_mask = bin_mask.astype(bool)
+
+    return bin_mask, depth_map
+
+
+def fill_in_fast(depth_map, max_depth=100.0, custom_kernel=DIAMOND_KERNEL_5,
+                 extrapolate=False, blur_type='bilateral', mode='elevation'):
+    valid_pixels = (depth_map > -20) & (depth_map < 20)
+
+    if mode == 'depth':
+        depth_map[valid_pixels] = max_depth - depth_map[valid_pixels]
+
+    # Spread values
+    depth_map = cv2.dilate(depth_map, custom_kernel)
+    depth_map = cv2.morphologyEx(depth_map, cv2.MORPH_CLOSE, FULL_KERNEL_3)
+
+    # Fix empty pixels
+    empty_pixels = (depth_map <= -20) | (depth_map >= 20)
+    dilated = cv2.dilate(depth_map, FULL_KERNEL_3)
+    depth_map[empty_pixels] = dilated[empty_pixels]
+
+    bin_mask = (depth_map > -20) | (depth_map < 20)
+
+    if extrapolate:
+        top_row_pixels = np.argmax(bin_mask, axis=0)
+        top_pixel_values = depth_map[top_row_pixels, range(depth_map.shape[1])]
+        for pixel_col_idx in range(depth_map.shape[1]):
+            depth_map[0:top_row_pixels[pixel_col_idx], pixel_col_idx] = top_pixel_values[pixel_col_idx]
+
+    depth_map = cv2.medianBlur(depth_map, 5)
+
+    if blur_type == 'bilateral':
+        depth_map = cv2.bilateralFilter(depth_map, 5, 1.5, 2.0)
+    elif blur_type == 'gaussian':
+        blurred = cv2.GaussianBlur(depth_map, (5, 5), 0)
+        depth_map[bin_mask] = blurred[bin_mask]
+
+    if mode == 'depth':
+        depth_map[bin_mask] = max_depth - depth_map[bin_mask]
+
+    return bin_mask, depth_map
 
 
 def interpolate_3d_tool(lanes):
@@ -268,6 +313,10 @@ def visualize_lanes(lanes_2d, im, scale_factor):
 
 
 def fill_masks(ele_mask, grid_mask, iterations=2):
+    if not isinstance(ele_mask, torch.Tensor):
+        ele_mask = torch.from_numpy(ele_mask)
+    if not isinstance(grid_mask, torch.Tensor):
+        grid_mask = torch.from_numpy(grid_mask)
     ele = ele_mask.unsqueeze(0).unsqueeze(0)
     valid = grid_mask.float().unsqueeze(0).unsqueeze(0)
 
@@ -314,13 +363,15 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
         
         print(f"\npoints_cam[0]: {points_cam[0]}")
         print(f"voxels_info['y_range']: {voxels_info['y_range']}")
-        points_vert = (cam2vert @ points_cam.T).T             # (N, 3), in (x, z, y)
+        points_vert = (cam2vert @ points_cam.T).T   
+        points_vert[:, 1] = -points_vert[:, 1]  # negative 'y' means 'above' the camera and vice versa
+        points_vert[:, 1] = points_vert[:, 1] + cam_h
 
         # Debug ranges before ROI cropping
         print(f"[Lane {lane_id}] Before ROI crop:")
         print(f"  x range (right):   {points_vert[:,0].min():.2f} → {points_vert[:,0].max():.2f}")
-        print(f"  z range (forward): {points_vert[:,1].min():.2f} → {points_vert[:,1].max():.2f}")
-        print(f"  y range (elev):    {points_vert[:,2].min():.2f} → {points_vert[:,2].max():.2f}")
+        print(f"  y range (elev): {points_vert[:,1].min():.2f} → {points_vert[:,1].max():.2f}")
+        print(f"  z range (forward):    {points_vert[:,2].min():.2f} → {points_vert[:,2].max():.2f}")
         print(f"  ROI: x={voxels_info['roi_x']}, "
               f"z={voxels_info['roi_z']}, "
               f"y~[-{voxels_info['y_range']}, {voxels_info['y_range']}]")
@@ -329,10 +380,10 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
         mask = (
             (points_vert[:,0] >= voxels_info['roi_x'][0]) &
             (points_vert[:,0] <= voxels_info['roi_x'][1]) &
-            (points_vert[:,1] >= voxels_info['roi_z'][0]) &
-            (points_vert[:,1] <= voxels_info['roi_z'][1]) &
-            (points_vert[:,2] >= -voxels_info['y_range']) &
-            (points_vert[:,2] <=  voxels_info['y_range'])
+            (points_vert[:,2] >= voxels_info['roi_z'][0]) &
+            (points_vert[:,2] <= voxels_info['roi_z'][1]) &
+            (points_vert[:,1] >= -voxels_info['y_range']) &
+            (points_vert[:,1] <=  voxels_info['y_range'])
         )
         points_roi = points_vert[mask]
 
@@ -342,66 +393,107 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
 
         # Explicit naming after crop
         x = points_roi[:, 0]  # right
-        z = points_roi[:, 1]  # forward
-        y = points_roi[:, 2]  # elevation
+        y = points_roi[:, 1]  # elevation
+        z = points_roi[:, 2]  # forward
 
         print(f"  After ROI crop: kept {len(points_roi)} points")
         print(f"    x range: {x.min():.2f} → {x.max():.2f}")
         print(f"    z range: {z.min():.2f} → {z.max():.2f}")
         print(f"    y range: {y.min():.2f} → {y.max():.2f}")
-
-        for xi, zi, yi in zip(x, z, y):
+        for xi, yi, zi in zip(x, y, z):
             idx_x = int((xi - voxels_info['roi_x'][0]) / voxels_info['grid_res'][0])
-            idx_z = H - 1 - int((zi - voxels_info['roi_z'][0]) / voxels_info['grid_res'][2])
+            idx_z = H- 1 - int((zi - voxels_info['roi_z'][0]) / voxels_info['grid_res'][2])
 
             if 0 <= idx_x < W and 0 <= idx_z < H:
-                print(f"    Placing point → grid idx_z={idx_z}, idx_x={idx_x}, elev={-yi:.3f}")
-                ele_mask[idx_z, idx_x] += (-yi)
+                print(f"    Placing point → grid idx_z={idx_z}, idx_x={idx_x}, elev={yi:.3f}")
+                ele_mask[idx_z, idx_x] += yi
                 grids_count[idx_z, idx_x] += 1
 
     # average per grid cell
     grid_mask = grids_count > 0
     ele_mask[grid_mask] /= grids_count[grid_mask]
 
-    bin_mask, ele_mask = fill_masks(ele_mask, grid_mask, iterations=iterations)
-    return bin_mask, ele_mask
+    ele_mask = np.asarray(ele_mask)
+    # bin_mask, ele_mask = fill_masks(ele_mask, grid_mask, iterations=iterations)
+    bin_mask, ele_mask = fill_in_fast_old(ele_mask, custom_kernel=DIAMOND_KERNEL_5,
+                            extrapolate=False, blur_type='bilateral', 
+                            mode='elevation')
 
-def save_masks(bin_mask, ele_mask, voxels_info, im_pth, save_dir="debug_masks", idx=0):
+    return bin_mask, ele_mask
+    # return ele_mask
+
+def save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, im_pth, save_dir="debug_masks", idx=0):
     os.makedirs(save_dir, exist_ok=True)
 
-    # Convert tensors to numpy if needed
-    if isinstance(bin_mask, np.ndarray) == False:
+    # Ensure numpy arrays
+    if not isinstance(bin_mask, np.ndarray):
         bin_mask = bin_mask.cpu().numpy() if hasattr(bin_mask, 'cpu') else np.array(bin_mask)
-    if isinstance(ele_mask, np.ndarray) == False:
+    if not isinstance(ele_mask, np.ndarray):
         ele_mask = ele_mask.cpu().numpy() if hasattr(ele_mask, 'cpu') else np.array(ele_mask)
 
-    # Correct z-axis: map first axis (rows) to roi_z correctly
-    H, W = bin_mask.shape
+    # Shape and plotting extents
+    H, W = ele_mask.shape
     extent = [
         voxels_info['roi_x'][0], voxels_info['roi_x'][1],  # left, right
-        voxels_info['roi_z'][0], voxels_info['roi_z'][1]   # bottom, top
+        voxels_info['roi_z'][0], voxels_info['roi_z'][1]   # near, far
     ]
 
-    # Binary mask
+    # --- Binary mask ---
     plt.figure(figsize=(W/50, H/50))
     plt.imshow(bin_mask, cmap='gray', origin='upper', extent=extent, aspect='auto')
     plt.title("Binary Mask")
     plt.xlabel("x (right)")
     plt.ylabel("z (forward)")
-    plt.savefig(os.path.join(save_dir, f"bin_mask_{idx}.png"))
+    plt.savefig(os.path.join(save_dir, f"bin_mask_{idx}.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # Elevation mask
+    # --- Elevation mask ---
     plt.figure(figsize=(W/50, H/50))
     plt.imshow(ele_mask, cmap='jet', origin='upper', extent=extent, aspect='auto')
     plt.colorbar(label="Height (m)")
     plt.title("Elevation Mask")
     plt.xlabel("x (right)")
     plt.ylabel("z (forward)")
-    plt.savefig(os.path.join(save_dir, f"ele_mask_{idx}.png"))
+    plt.savefig(os.path.join(save_dir, f"ele_mask_{idx}.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # Save image
+    # --- Optional overlay on RGB image ---
     im = cv2.imread(im_pth)
     if im is not None:
-        cv2.imwrite(os.path.join(save_dir, f"image_{idx}.png"), im)
+        overlay = (bin_mask.astype(np.uint8) * 255)
+        overlay = cv2.resize(overlay, (im.shape[1], im.shape[0]))
+        overlay_colored = cv2.applyColorMap(overlay, cv2.COLORMAP_JET)
+        blended = cv2.addWeighted(im, 0.7, overlay_colored, 0.3, 0)
+        cv2.imwrite(os.path.join(save_dir, f"overlay_{idx}.png"), blended)
+
+    # Draw lanes directly on image
+    lanes_on_image(lanes, cam2img, im_pth, idx)
+
+
+
+def lanes_on_image(lanes: list, cam2img: np.ndarray, im_pth: str, idx: int):
+    print(f"cam2img.shape: {cam2img.shape}")
+    im = cv2.imread(im_pth)
+    for lane in lanes:
+        points_xyz = np.array(lane)
+        # ones = np.ones((points_xyz.shape[0], 1))
+        # points_homo = np.hstack([points_xyz, ones])
+        points_homo = points_xyz
+        proj = cam2img@points_homo.T
+        proj = proj.T
+        
+        proj[:, 0] /= proj[:, 2]
+        proj[:, 1] /= proj[:, 2]
+
+        points_uv = proj[:, :2]
+        points_uv = points_uv.astype(int)
+        
+        for i in range(len(points_uv)-1):
+            pt1 = tuple(points_uv[i])
+            pt2 = tuple(points_uv[i+1])
+            cv2.line(im, pt1, pt2, color=(0,255,0), thickness=1)
+
+    fname = im_pth.strip().split('/')[-1]
+
+    saved = cv2.imwrite(f'/data24t_1/owais.tahir/3DLanes/mmdetection/tools/debug_masks/lane_image_{idx}.png', im)
+    print(f"saved: {saved}")

@@ -1,18 +1,29 @@
-data_root = 'data/Geo3DLanes'
+data_root = 'data/Apollo_Sim_3D_Lane_Release'
 dataset_type = 'mmdet.Apollo3D'
-classes = ['lane']
-lidar_sweeps = 2
+
 backend_args = None
 img_scale = (1920, 1080)
-mask_downscale = 1
-iterations = 2
+feat_downscale = 4
+iterations = 1
 
-train_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/standard/train.json'
-val_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/standard/val.json'
+train_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/lanes_in_cam/train.json'
+val_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/lanes_in_cam/val.json'
 
-img_prefix = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release'
+img_prefix = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/images/'
 
 compose_params = dict(bboxes=False, keypoints=True, masks=True)
+
+classes = ['SingleSolid', 'SingleDash', 'DoubleSolid', 'DoubleDash', 
+           'LeftDashRightSolid', 'LeftSolidRightDash', 'Curb', 'Imaginary', 'Other']
+id2class = {'SingleSolid': 0,
+            'SingleDash': 1,
+            'DoubleSolid': 2,
+            'DoubleDash': 3,
+            'LeftDashRightSolid': 4,
+            'LeftSolidRightDash': 5,
+            'Curb': 6,
+            'Imaginary': 7,
+            'Other': 8}
 
 train_al_pipeline = [
     dict(type="Compose", params=compose_params),
@@ -26,13 +37,19 @@ train_al_pipeline = [
 train_pipeline = [
     dict(type="LoadImageFromFile"), 
     dict(type="mmdet.VoxelGenerator", 
-         base_height=1.78,
-         y_range=0.8,
-         roi_x=(-20, 20),
-         roi_z=(4, 125),
-         grid_res=(0.2, 0.1, 0.5)),
-    # dict(type="Normalize", mean=[], std=[]),
-    dict(type="mmdet.LoadLaneMasks", mask_downscale=mask_downscale, iterations=iterations),
+            base_height=1.786,
+            y_range=10,
+            roi_x=(-20, 20),
+            roi_z=(4, 125),
+            grid_res=(0.2, 0.1, 0.4) # y res in cms instead of ms
+            ),
+    dict(type="mmdet.Resize", scale=img_scale),
+    dict(type="mmdet.Normalize", mean=[0.56911952, 0.54184569, 0.4889298], std=[0.16311612, 0.16758122, 0.1713779]),
+    dict(type="mmdet.LoadLaneMasks",
+            iterations=iterations,
+            ),
+    dict(type="mmdet.Pack3DLanesInputs"),  # Custom packing for 3D lanes data
+    # dict(type="mmdet.CropROIimage"),
     # dict(type="DepthCompltetion") #
     # dict(type="Resize", scale=img_scale, keep_ratio=True)
     # dict(type="Alaug", pipeline=train_al_pipeline) #
@@ -40,7 +57,7 @@ train_pipeline = [
 
 val_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type="mmdet.LoadLaneMasks", mask_downscale=mask_downscale, iterations=iterations),
+    dict(type="mmdet.LoadLaneMasks", iterations=iterations),
     # dict(type="Resize", scale=img_scale, keep_ratio=True)
     ] # dummy transform for now
 
@@ -49,12 +66,15 @@ train_dataloader = dict(
     num_workers=1,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
+    collate_fn=dict(type='default_collate'),
     dataset=dict(
         type=dataset_type,
         data_root=data_root,
         ann_file=train_ann_file,
         img_prefix=img_prefix,
-        metainfo=dict(classes=classes, lidar_sweeps=lidar_sweeps),
+        id2class=id2class,
+        feat_downscale=feat_downscale,
+        metainfo=dict(classes=classes),
         pipeline=train_pipeline,
         backend_args=backend_args    
     )
@@ -69,7 +89,8 @@ train_dataloader = dict(
 #         data_root=data_root,
 #         ann_file=val_ann_file,
 #         img_prefix=img_prefix,
-#         metainfo=dict(classes=classes, lidar_sweeps=lidar_sweeps),
+#         id2class=id2class,
+#         metainfo=dict(classes=classes),
 #         pipeline=val_pipeline,
 #         backend_args=backend_args,
 #         test_mode=True,
