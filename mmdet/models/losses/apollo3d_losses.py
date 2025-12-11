@@ -34,7 +34,17 @@ class MyLoss(nn.Module):
         ele_mask_roi = torch.logical_and(ele_gt > -self.ele_range, ele_gt < self.ele_range)
         ele_mask = torch.logical_and(ele_mask_roi, ele_mask)
 
+        # squeeze the extra dimensions from gt masks
+        if ele_gt.dim() == 4 and ele_gt.shape[1] == 1:
+            ele_gt = ele_gt.squeeze(1)
+        if ele_mask.dim() == 4 and ele_mask.shape[1] == 1:
+            ele_mask = ele_mask.squeeze(1)
+
         ele_pred = ele_pred.permute(0, 2, 3, 1)
+
+        print(f"ele_pred.shape: {ele_pred.shape}")
+        print(f"ele_mask.shape: {ele_mask.shape}")
+
         ele_pred = ele_pred[ele_mask, :]
         ele_gt = ele_gt[ele_mask]
 
