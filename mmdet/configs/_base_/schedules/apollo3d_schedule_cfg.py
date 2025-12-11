@@ -1,10 +1,9 @@
 train_cfg = dict(
     type='EpochBasedTrainLoop',
-    max_epochs=1,
+    max_epochs=60,
     # val_interval=1
 )
 
-optim_wrapper = dict(optimizer=dict(type='SGD', 
-                                    lr=0.01, 
-                                    momentum=0.9, 
-                                    weight_decay=0.0001))
+optim_wrapper = dict(optimizer=dict(type='AdamW', 
+                                    lr=8e-4, 
+                                    weight_decay=1e-4))

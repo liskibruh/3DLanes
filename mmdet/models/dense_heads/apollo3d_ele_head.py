@@ -40,16 +40,11 @@ class EleHead(nn.Module):
 
     def forward(self, feat_voxel):
         # feat_voxel: [B, C, Z, X, Y]
-        print("feat_voxel.shape: ", feat_voxel.shape)
         B = feat_voxel.shape[0]
         #### get the BEV feature.  shape: [B, C_, num_grids_z, num_grids_x]
         feat_bev = feat_voxel.permute(0, 4, 1, 2, 3).reshape(B, self.channel_reshaped, self.num_grids_z, self.num_grids_x)  # [B,Y*C,Z,X]
-        print(f"feat_bev after reshape: {feat_bev.shape}")
         feat_bev = self.first_conv(feat_bev)
-        print(f"feat_bev after first_conv: {feat_bev.shape}")
         feat_bev = self.effnet_reg(feat_bev)
-        print(f"feat_bev after effnet_reg: {feat_bev.shape}")
         ele_cla_prob = self.final_conv(feat_bev)  # [B, num_classes, Z, X]
-        print(f"ele_cla_prob.shape: {ele_cla_prob.shape}")
 
         return ele_cla_prob

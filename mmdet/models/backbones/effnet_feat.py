@@ -164,9 +164,7 @@ class MBConv(nn.Module):
         activation_layer = nn.SiLU
 
         # expand
-        print(f"Before expanding: {cnf.input_channels}")
         expanded_channels = cnf.adjust_channels(cnf.input_channels, cnf.expand_ratio)
-        print(f"After expanding: {expanded_channels}")
         if expanded_channels != cnf.input_channels:
             layers.append(
                 ConvNormActivation(

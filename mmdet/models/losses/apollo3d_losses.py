@@ -42,9 +42,6 @@ class MyLoss(nn.Module):
 
         ele_pred = ele_pred.permute(0, 2, 3, 1)
 
-        print(f"ele_pred.shape: {ele_pred.shape}")
-        print(f"ele_mask.shape: {ele_mask.shape}")
-
         ele_pred = ele_pred[ele_mask, :]
         ele_gt = ele_gt[ele_mask]
 

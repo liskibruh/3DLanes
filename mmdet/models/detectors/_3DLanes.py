@@ -54,9 +54,6 @@ class _3DLanes(BaseDetector):
     def loss(self, batch_inputs, batch_data_samples, **kwargs):
 
         losses = {}
-        print(f"batch_inputs.keys(): {batch_inputs.keys()}")
-        print(f"batch_data_samples[0].keys(): {batch_data_samples[0].keys()}")
-
         # extract ground truth masks
         gt_bin_masks = []
         gt_ele_masks = []
@@ -69,26 +66,17 @@ class _3DLanes(BaseDetector):
         if gt_bin_masks:
             gt_bin_mask = torch.stack(gt_bin_masks, dim=0)
             gt_ele_mask = torch.stack(gt_ele_masks, dim=0)
-            print(f"gt_bin_mask.shape: {gt_bin_mask.shape}")
-            print(f"gt_ele_mask.shape: {gt_ele_mask.shape}")
 
         features_left = self.backbone(batch_inputs['img'])
-        print(f"features_left.shape: {features_left.shape}")
         B, C, H, W = features_left.shape
         features_left = features_left.reshape(B, C, -1)
     
         if 'voxel_proj_index' in batch_inputs:
-            print(f"voxel_proj_index.shape: {batch_inputs['voxel_proj_index'].shape}")
             proj_index_left = batch_inputs['voxel_proj_index']
-            # add bounds checking
-            print(f"proj_index_left min/max: {proj_index_left.min()}, {proj_index_left.max()}")
-            print(f"Feature map H, W: {H}, {W}")
             
             # check if indices are within bounds
             x_indices = proj_index_left[:, 0, :]
             y_indices = proj_index_left[:, 1, :]
-            print(f"x_indices range: {x_indices.min()} to {x_indices.max()}")
-            print(f"y_indices range: {y_indices.min()} to {y_indices.max()}")
 
             linear_indices = proj_index_left[:, 1, :] * W + proj_index_left[:, 0, :]
             voxel_feat_left = features_left.gather(dim=2, index=linear_indices.unsqueeze(1).expand(-1, C, -1))
@@ -111,7 +99,6 @@ class _3DLanes(BaseDetector):
         losses = {}
 
         if 'voxel_proj_index' in batch_inputs:
-            print(f"voxel_proj_index.shape: {batch_inputs['voxel_proj_index'].shape}")
             voxel_proj_index = batch_inputs['voxel_proj_index']
         
         if self.with_head:
@@ -122,10 +109,6 @@ class _3DLanes(BaseDetector):
         else:
             # placeholder loss for testing
             losses['loss_dummy'] = torch.tensor(0.0, requires_grad=True)
-        print(f"="*64)
-        print(f"loss() completed")
-        print(f"feats.shape: {feats.shape}")
-        print(f"="*64)
         
         return losses
     

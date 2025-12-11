@@ -92,11 +92,6 @@ class VoxelGenerator(BaseTransform):
                                     self.base_height - self.y_range + self.grid_res[1] / 2
                                     ).unsqueeze(0).unsqueeze(0).repeat(self.num_grids_z, self.num_grids_x, 1)
         self.voxel_centers = voxel_centers.reshape(-1, 3).transpose(1, 0)
-        
-        print(f"DEBUG: Built voxel centers")
-        print(f"  X range: {self.voxel_centers[0].min():.1f} to {self.voxel_centers[0].max():.1f}")
-        print(f"  Y range: {self.voxel_centers[1].min():.3f} to {self.voxel_centers[1].max():.3f}")
-        print(f"  Z range: {self.voxel_centers[2].min():.1f} to {self.voxel_centers[2].max():.1f}")
 
     def _build_centers(self):
         # BEV centers
@@ -127,32 +122,13 @@ class VoxelGenerator(BaseTransform):
         if isinstance(feat_intrinsic, np.ndarray):
             feat_intrinsic = to_tensor(feat_intrinsic).float()
 
-        print(f"=== DEBUGGING COORDINATE TRANSFORMS ===")
-        print(f"Original voxel centers (vert coords):")
-        print(f"  X range: {self.voxel_centers[0].min():.1f} to {self.voxel_centers[0].max():.1f}")
-        print(f"  Y range: {self.voxel_centers[1].min():.3f} to {self.voxel_centers[1].max():.3f}")
-        print(f"  Z range: {self.voxel_centers[2].min():.1f} to {self.voxel_centers[2].max():.1f}")
-
         voxel_cam = vert2cam @ self.voxel_centers
         # Filter out voxels behind camera (Z <= 0)
         valid_mask = voxel_cam[2, :] > 0.1  # At least 10cm in front
         voxel_cam_valid = voxel_cam[:, valid_mask]
 
-        print(f"After vert2cam (camera coords):")
-        print(f"  X range: {voxel_cam[0].min():.1f} to {voxel_cam[0].max():.1f}")
-        print(f"  Y range: {voxel_cam[1].min():.1f} to {voxel_cam[1].max():.1f}")
-        print(f"  Z range: {voxel_cam[2].min():.1f} to {voxel_cam[2].max():.1f}")
-
-        print(f"feat_intrinsic matrix:")
-        print(feat_intrinsic)
-
         # voxel_uvz = feat_intrinsic @ voxel_cam
         voxel_uvz = feat_intrinsic @ voxel_cam_valid
-        print(f"After feat_intrinsic (image coords before division):")
-        print(f"  U range: {voxel_uvz[0].min():.1f} to {voxel_uvz[0].max():.1f}")
-        print(f"  V range: {voxel_uvz[1].min():.1f} to {voxel_uvz[1].max():.1f}")
-        print(f"  Z range: {voxel_uvz[2].min():.3f} to {voxel_uvz[2].max():.3f}")
-        
         voxel_uv = torch.floor(voxel_uvz[:2, :] / voxel_uvz[2:, :]).type(torch.long)
 
         # Filter out voxels outside image bounds
@@ -166,10 +142,6 @@ class VoxelGenerator(BaseTransform):
         voxel_uv_full = torch.zeros((2, self.voxel_centers.shape[1]), dtype=torch.long)
         valid_indices = torch.where(valid_mask)[0][image_mask]
         voxel_uv_full[:, valid_indices] = voxel_uv_valid
-        
-        print(f"Valid voxels: {valid_indices.shape[0]} / {self.voxel_centers.shape[1]}")
-        print(f"Final U range: {voxel_uv_full[0].min()} to {voxel_uv_full[0].max()}")
-        print(f"Final V range: {voxel_uv_full[1].min()} to {voxel_uv_full[1].max()}")
 
         results['voxels_info'] = dict(
             voxel_uv=voxel_uv_full,
@@ -209,24 +181,12 @@ class LoadLaneMasks(BaseTransform):
         cam2img = results['cam_intrinsic']
         voxels_info = results['voxels_info']
 
-        #todo:
-            # read the lane line points
-            # transform points to vert cam
-            # crop roi
-            # create gt and ele masks
-        print(f"results['img_shape']: {results['img_shape']}")
-        print(f"results['cam2vert'].shape: {results['cam2vert'].shape}")
-        print(f"results['ground2cam'].shape: {results['ground2cam'].shape}")
         lanes = [inst['lane'] for inst in results['instances']]
         bin_mask, ele_mask = get_gt_masks(lanes, voxels_info, cam2vert, cam_h, cam_pitch, iterations=self.iterations)
         # lanes_on_image(lanes, cam2img, results['img_path'], idx=results.get("sample_idx", 0))
-        print(f"bin_mask.shape: {bin_mask.shape}")
-        print(f"ele_mask.shape: {ele_mask.shape}")
-        print(f"img shape: {results['img'].shape}")
         # save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, results['img_path'], save_dir="debug_masks", idx=results.get("sample_idx", 0))
 
-        # Add masks to results dictionary
-        # Convert to torch tensors for consistency
+        # convert to torch tensors for consistency
         if isinstance(bin_mask, np.ndarray):
             bin_mask = torch.from_numpy(bin_mask)
         if isinstance(ele_mask, np.ndarray):
@@ -270,8 +230,6 @@ class CropROIimage(BaseTransform):
         corners_h = np.concatenate([ground_corners, np.ones((ground_corners.shape[0], 1))], axis=1)
         cam_coords = (ground2cam @ corners_h.T).T[:, :3]
 
-        print(f"cam_coords: \n{cam_coords}")
-
         # only keep corners in front of camera
         mask = cam_coords[:, 2] > 1e-3
         cam_coords = cam_coords[mask]
@@ -281,8 +239,6 @@ class CropROIimage(BaseTransform):
 
         img_corners = (cam2img @ cam_coords.T).T
         img_corners = (img_corners[:, :2] / img_corners[:, 2:])
-
-        print(f"img_corners: \n{img_corners}")
 
         # clip to image size
         H, W = results['img'].shape[:2]
@@ -297,7 +253,6 @@ class CropROIimage(BaseTransform):
 
         img = results['img']
         cropped_img = img[vmin:vmax, umin:umax, :]
-        print(f"ROI crop: u=({umin},{umax}), v=({vmin},{vmax}), shape={cropped_img.shape}")
 
         results['img_roi'] = (umin, vmin, umax, vmax)
         results['img'] = cropped_img
@@ -336,7 +291,6 @@ class Pack3DLanesInputs(BaseTransform):
         Returns:
             dict: Packed results with 'inputs' and 'data_samples' keys.
         """
-        print(f"results.keys: {results.keys()}")
         packed_results = dict()
 
         # Pack image

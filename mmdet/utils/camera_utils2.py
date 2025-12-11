@@ -127,7 +127,6 @@ def save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, im_pth, save_dir
 
 
 def lanes_on_image(lanes: list, cam2img: np.ndarray, im_pth: str, idx: int):
-    print(f"cam2img.shape: {cam2img.shape}")
     im = cv2.imread(im_pth)
     for lane in lanes:
         points_xyz = np.array(lane)
