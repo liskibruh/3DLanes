@@ -76,6 +76,28 @@ class VoxelGenerator(BaseTransform):
 
         self._build_centers()
 
+    def _build_centers_new(self):
+        # BEV centers
+        hori_centers = torch.zeros((self.num_grids_z, self.num_grids_x, 2), dtype=torch.float32)
+        hori_centers[:, :, 0] = (torch.arange(self.num_grids_x) * self.grid_res[0] +
+                                self.roi_x[0] + self.grid_res[0] / 2).unsqueeze(0).repeat(self.num_grids_z, 1)
+        hori_centers[:, :, 1] = (torch.arange(self.num_grids_z) * self.grid_res[2] +
+                                self.roi_z[0] + self.grid_res[2] / 2).unsqueeze(1).repeat(1, self.num_grids_x)
+        self.map_centers = hori_centers.reshape(-1, 2)
+
+        # Generate 3D voxel centers
+        voxel_centers = torch.zeros((self.num_grids_z, self.num_grids_x, self.num_grids_y, 3), dtype=torch.float32)
+        voxel_centers[:, :, :, [0, 2]] = hori_centers.unsqueeze(2).repeat(1, 1, self.num_grids_y, 1)
+        voxel_centers[:, :, :, 1] = (torch.arange(self.num_grids_y) * self.grid_res[1] +
+                                    self.base_height - self.y_range + self.grid_res[1] / 2
+                                    ).unsqueeze(0).unsqueeze(0).repeat(self.num_grids_z, self.num_grids_x, 1)
+        self.voxel_centers = voxel_centers.reshape(-1, 3).transpose(1, 0)
+        
+        print(f"DEBUG: Built voxel centers")
+        print(f"  X range: {self.voxel_centers[0].min():.1f} to {self.voxel_centers[0].max():.1f}")
+        print(f"  Y range: {self.voxel_centers[1].min():.3f} to {self.voxel_centers[1].max():.3f}")
+        print(f"  Z range: {self.voxel_centers[2].min():.1f} to {self.voxel_centers[2].max():.1f}")
+
     def _build_centers(self):
         # BEV centers
         hori_centers = torch.zeros((self.num_grids_z, self.num_grids_x, 2), dtype=torch.float32)
@@ -104,13 +126,53 @@ class VoxelGenerator(BaseTransform):
             vert2cam = to_tensor(vert2cam).float()
         if isinstance(feat_intrinsic, np.ndarray):
             feat_intrinsic = to_tensor(feat_intrinsic).float()
-        voxel_cam = vert2cam @ self.voxel_centers
 
-        voxel_uvz = feat_intrinsic @ voxel_cam
+        print(f"=== DEBUGGING COORDINATE TRANSFORMS ===")
+        print(f"Original voxel centers (vert coords):")
+        print(f"  X range: {self.voxel_centers[0].min():.1f} to {self.voxel_centers[0].max():.1f}")
+        print(f"  Y range: {self.voxel_centers[1].min():.3f} to {self.voxel_centers[1].max():.3f}")
+        print(f"  Z range: {self.voxel_centers[2].min():.1f} to {self.voxel_centers[2].max():.1f}")
+
+        voxel_cam = vert2cam @ self.voxel_centers
+        # Filter out voxels behind camera (Z <= 0)
+        valid_mask = voxel_cam[2, :] > 0.1  # At least 10cm in front
+        voxel_cam_valid = voxel_cam[:, valid_mask]
+
+        print(f"After vert2cam (camera coords):")
+        print(f"  X range: {voxel_cam[0].min():.1f} to {voxel_cam[0].max():.1f}")
+        print(f"  Y range: {voxel_cam[1].min():.1f} to {voxel_cam[1].max():.1f}")
+        print(f"  Z range: {voxel_cam[2].min():.1f} to {voxel_cam[2].max():.1f}")
+
+        print(f"feat_intrinsic matrix:")
+        print(feat_intrinsic)
+
+        # voxel_uvz = feat_intrinsic @ voxel_cam
+        voxel_uvz = feat_intrinsic @ voxel_cam_valid
+        print(f"After feat_intrinsic (image coords before division):")
+        print(f"  U range: {voxel_uvz[0].min():.1f} to {voxel_uvz[0].max():.1f}")
+        print(f"  V range: {voxel_uvz[1].min():.1f} to {voxel_uvz[1].max():.1f}")
+        print(f"  Z range: {voxel_uvz[2].min():.3f} to {voxel_uvz[2].max():.3f}")
+        
         voxel_uv = torch.floor(voxel_uvz[:2, :] / voxel_uvz[2:, :]).type(torch.long)
 
+        # Filter out voxels outside image bounds
+        H, W = 270, 480  # Feature map size
+        image_mask = (voxel_uv[0, :] >= 0) & (voxel_uv[0, :] < W) & \
+                    (voxel_uv[1, :] >= 0) & (voxel_uv[1, :] < H)
+    
+        voxel_uv_valid = voxel_uv[:, image_mask]
+
+        # Create full index tensor with invalid indices set to 0
+        voxel_uv_full = torch.zeros((2, self.voxel_centers.shape[1]), dtype=torch.long)
+        valid_indices = torch.where(valid_mask)[0][image_mask]
+        voxel_uv_full[:, valid_indices] = voxel_uv_valid
+        
+        print(f"Valid voxels: {valid_indices.shape[0]} / {self.voxel_centers.shape[1]}")
+        print(f"Final U range: {voxel_uv_full[0].min()} to {voxel_uv_full[0].max()}")
+        print(f"Final V range: {voxel_uv_full[1].min()} to {voxel_uv_full[1].max()}")
+
         results['voxels_info'] = dict(
-            voxel_uv=voxel_uv,
+            voxel_uv=voxel_uv_full,
             # voxel_centers=self.voxel_centers,
             # map_centers=self.map_centers,
             roi_x=self.roi_x,
@@ -161,8 +223,7 @@ class LoadLaneMasks(BaseTransform):
         print(f"bin_mask.shape: {bin_mask.shape}")
         print(f"ele_mask.shape: {ele_mask.shape}")
         print(f"img shape: {results['img'].shape}")
-        # print(f"voxel_centers.shape: {results['voxels_info']['voxel_centers'].shape}")
-        save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, results['img_path'], save_dir="debug_masks", idx=results.get("sample_idx", 0))
+        # save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, results['img_path'], save_dir="debug_masks", idx=results.get("sample_idx", 0))
 
         # Add masks to results dictionary
         # Convert to torch tensors for consistency

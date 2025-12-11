@@ -151,6 +151,14 @@ class Apollo3D(BaseDetDataset):
                 cam2vert = self.build_cam2vert_new(
                     sample['cam_pitch'], sample['cam_height'])
                 # cam2vert = self.build_cam2vert(sample['cam_pitch'], sample['cam_height'])
+                
+                cam_intrinsic = self.METAINFO['cam_intrinsic'].copy()
+                feat_intrinsic = self.METAINFO['cam_intrinsic'].copy()
+                feat_intrinsic[0, 0] /= self.feat_downscale  # fx
+                feat_intrinsic[1, 1] /= self.feat_downscale  # fy
+                feat_intrinsic[0, 2] /= self.feat_downscale  # cx
+                feat_intrinsic[1, 2] /= self.feat_downscale  # cy
+
 
                 data_list.append(
                     dict(
@@ -159,8 +167,8 @@ class Apollo3D(BaseDetDataset):
                         img_id=i,
                         cam_height=sample['cam_height'],
                         cam_pitch=sample['cam_pitch'],
-                        cam_intrinsic=self.METAINFO['cam_intrinsic'],
-                        feat_intrinsic=self.METAINFO['cam_intrinsic']/self.feat_downscale,
+                        cam_intrinsic=cam_intrinsic,
+                        feat_intrinsic=feat_intrinsic,
                         ground2cam=ground2cam,
                         cam2vert=cam2vert,
                         instances=instances

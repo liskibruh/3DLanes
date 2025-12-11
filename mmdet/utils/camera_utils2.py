@@ -16,7 +16,7 @@ def adjust_intrinsic(K, ori_shape, new_shape, crop_offset=(0,0)):
     K_adj[1, 2] = K[1, 2] * sy - crop_offset[1]
     return K_adj
 
-def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: float, cam_pitch: float, iterations: int, radius: int = 2):
+def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: float, cam_pitch: float, iterations: int, radius: int = 1):
     H, W = voxels_info['num_grids_z'], voxels_info['num_grids_x']
     ele_mask = np.zeros((H, W), dtype=np.float32)   # switched to numpy directly for cv2 ops
     bin_mask = np.zeros((H, W), dtype=np.uint8)
@@ -26,26 +26,36 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
     else:
         cam2vert = cam2vert.float()
 
+    # all_x_coords, all_z_coords = [], []
+
     # project and rasterize into grid
     for lane_id, lane in enumerate(lanes):
         points_cam = torch.tensor(lane, dtype=torch.float32)  # (N, 3)
+        points_cam = torch.tensor(lane, dtype=torch.float32)
+        # all_x_coords.extend(points_cam[:, 0].tolist())
+        # all_z_coords.extend(points_cam[:, 2].tolist())
+    
+        # if all_x_coords:
+        #     print(f"GT lanes camera coordinates:")
+        #     print(f"  X range: {min(all_x_coords):.1f} to {max(all_x_coords):.1f}")
+        #     print(f"  Z range: {min(all_z_coords):.1f} to {max(all_z_coords):.1f}")
 
-        print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Camera Coordinates] \n\ty_values: {points_cam[:, 1]}")
-        print(f"")
+        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Camera Coordinates] \n\ty_values: {points_cam[:, 1]}")
+        # print(f"")
 
         # project to vertical space
         points_vert = (cam2vert @ points_cam.T).T
         # points_vert = points_cam.clone().detach()
-        print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Vertical Coordinates] \n\ty_values: {points_vert[:, 1]}")
-        print(f"")
+        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Vertical Coordinates] \n\ty_values: {points_vert[:, 1]}")
+        # print(f"")
         points_vert[:, 1] = (points_vert[:, 1] - cam_h)*100 #cms
         # points_vert[:, 1] = (cam_h - points_vert[:, 1])
-        print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch:  {cam_pitch}, [Vertical Coordinates After Height Addition] \n\ty_values: {points_vert[:, 1]}")
-        print(f"")
+        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch:  {cam_pitch}, [Vertical Coordinates After Height Addition] \n\ty_values: {points_vert[:, 1]}")
+        # print(f"")
         points_vert[:, 1] = -points_vert[:, 1]      # invert y
-        print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Vertical Coordinates After Inversion] \n\ty_values: {points_vert[:, 1]}")
+        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Vertical Coordinates After Inversion] \n\ty_values: {points_vert[:, 1]}")
 
-        print(f"="*64)
+        # print(f"="*64)
 
         # apply ROI mask
         mask = (

@@ -1,10 +1,16 @@
 data_root = 'data/Apollo_Sim_3D_Lane_Release'
 dataset_type = 'mmdet.Apollo3D'
 
+
 backend_args = None
 img_scale = (1920, 1080)
 feat_downscale = 4
-iterations = 1
+iterations = 0
+base_height=1.786
+y_range= 7 #10
+roi_x= (-10, 10) #(-20,20)
+roi_z=(4, 80) #(4, 125)
+grid_res=(0.3, 0.3, 0.5)
 
 train_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/lanes_in_cam/train.json'
 val_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/lanes_in_cam/val.json'
@@ -37,11 +43,11 @@ train_al_pipeline = [
 train_pipeline = [
     dict(type="LoadImageFromFile"), 
     dict(type="mmdet.VoxelGenerator", 
-            base_height=1.786,
-            y_range=10,
-            roi_x=(-20, 20),
-            roi_z=(4, 125),
-            grid_res=(0.2, 0.1, 0.4) # y res in cms instead of ms
+            base_height=base_height,
+            y_range=y_range,
+            roi_x=roi_x,
+            roi_z=roi_z,
+            grid_res=grid_res
             ),
     dict(type="mmdet.Resize", scale=img_scale),
     dict(type="mmdet.Normalize", mean=[0.56911952, 0.54184569, 0.4889298], std=[0.16311612, 0.16758122, 0.1713779]),
