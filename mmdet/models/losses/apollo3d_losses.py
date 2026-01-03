@@ -34,6 +34,11 @@ class MyLoss(nn.Module):
         ele_mask_roi = torch.logical_and(ele_gt > -self.ele_range, ele_gt < self.ele_range)
         ele_mask = torch.logical_and(ele_mask_roi, ele_mask)
 
+        # handle case when no valid pixels exist
+        if ele_mask.sum() == 0:
+            print("Warning: No valid pixels found, returning zero loss")
+            return torch.tensor(0.0, device=ele_pred.device, requires_grad=True)
+
         # squeeze the extra dimensions from gt masks
         if ele_gt.dim() == 4 and ele_gt.shape[1] == 1:
             ele_gt = ele_gt.squeeze(1)

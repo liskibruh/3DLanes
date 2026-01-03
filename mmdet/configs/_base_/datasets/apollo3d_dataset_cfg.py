@@ -62,9 +62,20 @@ train_pipeline = [
     ]
 
 val_pipeline = [
-    dict(type='LoadImageFromFile'),
-    dict(type="mmdet.LoadLaneMasks", iterations=iterations),
-    # dict(type="Resize", scale=img_scale, keep_ratio=True)
+    dict(type="LoadImageFromFile"), 
+    dict(type="mmdet.VoxelGenerator", 
+            base_height=base_height,
+            y_range=y_range,
+            roi_x=roi_x,
+            roi_z=roi_z,
+            grid_res=grid_res
+            ),
+    dict(type="mmdet.Resize", scale=img_scale),
+    dict(type="mmdet.Normalize", mean=[0.56911952, 0.54184569, 0.4889298], std=[0.16311612, 0.16758122, 0.1713779]),
+    dict(type="mmdet.LoadLaneMasks",
+            iterations=iterations,
+            ),
+    dict(type="mmdet.Pack3DLanesInputs"),
     ] # dummy transform for now
 
 train_dataloader = dict(
@@ -85,24 +96,24 @@ train_dataloader = dict(
         backend_args=backend_args    
     )
 )
-# val_dataloader = dict(
-#     batch_size=2,
-#     num_workers=2,
-#     persistent_workers=True,
-#     sampler=dict(type='DefaultSampler', shuffle=True),
-#     dataset=dict(
-#         type=dataset_type,
-#         data_root=data_root,
-#         ann_file=val_ann_file,
-#         img_prefix=img_prefix,
-#         id2class=id2class,
-#         metainfo=dict(classes=classes),
-#         pipeline=val_pipeline,
-#         backend_args=backend_args,
-#         test_mode=True,
-#     )
-# )
+test_dataloader = dict(
+    batch_size=1,
+    num_workers=1,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=True),
+    collate_fn=dict(type='default_collate'),
+    dataset=dict(
+        type=dataset_type,
+        data_root=data_root,
+        ann_file=val_ann_file,
+        img_prefix=img_prefix,
+        id2class=id2class,
+        feat_downscale=feat_downscale,
+        metainfo=dict(classes=classes),
+        pipeline=val_pipeline,
+        backend_args=backend_args 
+    )
+)
 
-val_dataloader = None
-val_cfg = None
-val_evaluator = None
+# val_evaluator = dict(type='DummyMetric')
+# val_cfg = None

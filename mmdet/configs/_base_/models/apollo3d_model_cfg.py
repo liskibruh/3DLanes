@@ -1,13 +1,13 @@
 model = dict(
     type= 'mmdet._3DLanes',
-    data_preprocessor=dict(
-        type='DetDataPreprocessor',
-        mean = [],
-        std = [],
-        bgr_to_rgb=True,
-        # pad_mask = False,
-        # pad_size_divisor=1
-    ),
+    # data_preprocessor=dict(
+    #     type='DetDataPreprocessor',
+    #     mean = [],
+    #     std = [],
+    #     bgr_to_rgb=True,
+    #     # pad_mask = False,
+    #     # pad_size_divisor=1
+    # ),
     # backbone=dict(
     #     type='mmdet.ResNet',
     #     depth=50,

@@ -34,8 +34,16 @@ def _make_divisible(v: float, divisor: int, min_value: Optional[int] = None) -> 
 def convbn(in_channels, out_channels, kernel_size, stride, pad, dilation, **kwargs):
     return nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
                                    padding=dilation if dilation > 1 else pad, dilation=dilation, bias=False, **kwargs),
-                         nn.BatchNorm2d(out_channels))
+                        nn.BatchNorm2d(out_channels))
 
+def convgn(in_channels, out_channels, kernel_size, stride, pad, dilation):
+    return nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
+                                   padding=dilation if dilation > 1 else pad, dilation=dilation, bias=False),
+                         nn.GroupNorm(4, out_channels))
+
+def build_norm_layer(norm_type, num_channels, num_groups=32):
+    if norm_type=='BN':
+        pass
 class ConvNormActivation(torch.nn.Sequential):
     def __init__(
         self,
@@ -50,6 +58,7 @@ class ConvNormActivation(torch.nn.Sequential):
         dilation: int = 1,
         inplace: Optional[bool] = True,
         bias: Optional[bool] = None,
+        norm_groups: Optional[int] = None
     ) -> None:
         if padding is None:
             padding = (kernel_size - 1) // 2 * dilation
@@ -68,7 +77,14 @@ class ConvNormActivation(torch.nn.Sequential):
             )
         ]
         if norm_layer is not None:
-            layers.append(norm_layer(out_channels))
+            if norm_layer=='BN':
+                layers.append(norm_layer(out_channels))
+            elif norm_layer=='GN':
+                layers.append(
+                    norm_layer(
+                        num_groups=norm_groups,
+                        num_channels=out_channels)
+                )
         if activation_layer is not None:
             params = {} if inplace is None else {"inplace": inplace}
             layers.append(activation_layer(**params))
@@ -151,6 +167,7 @@ class MBConv(nn.Module):
         cnf: MBConvConfig,
         stochastic_depth_prob: float,
         norm_layer: Callable[..., nn.Module],
+        norm_groups: Optional[int] = None,
         se_layer: Callable[..., nn.Module] = SqueezeExcitation,
     ) -> None:
         super().__init__()
@@ -172,6 +189,7 @@ class MBConv(nn.Module):
                     expanded_channels,
                     kernel_size=1,
                     norm_layer=norm_layer,
+                    norm_groups=norm_groups,
                     activation_layer=activation_layer,
                 )
             )
@@ -185,6 +203,7 @@ class MBConv(nn.Module):
                 stride=cnf.stride,
                 groups=expanded_channels,
                 norm_layer=norm_layer,
+                norm_groups=norm_groups,
                 activation_layer=activation_layer,
             )
         )
@@ -196,7 +215,12 @@ class MBConv(nn.Module):
         # project
         layers.append(
             ConvNormActivation(
-                expanded_channels, cnf.out_channels, kernel_size=1, norm_layer=norm_layer, activation_layer=None
+                expanded_channels, 
+                cnf.out_channels, 
+                kernel_size=1, 
+                norm_layer=norm_layer, 
+                norm_groups=norm_groups,
+                activation_layer=None
             )
         )
 
@@ -237,6 +261,8 @@ class EfficientNetCla(nn.Module):
         num_classes: int = 1000,
         block: Optional[Callable[..., nn.Module]] = None,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        norm_groups: Optional[int] = None,
+        act_SiLU: Optional[bool] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -252,6 +278,8 @@ class EfficientNetCla(nn.Module):
         """
         super().__init__()
 
+        self.act_SiLU = act_SiLU
+
         if not inverted_residual_setting:
             raise ValueError("The inverted_residual_setting should not be empty")
         elif not (
@@ -263,8 +291,12 @@ class EfficientNetCla(nn.Module):
         if block is None:
             block = MBConv
 
-        if norm_layer is None:
+        assert norm_layer is not None, "'norm_layer' must be set to either 'BN' or 'GN'"
+        if norm_layer == 'BN':
             norm_layer = nn.BatchNorm2d
+        elif norm_layer == 'GN':
+            assert norm_groups is not None, "num_groups must be passed when 'norm_layer' is set to 'GN'"
+            norm_layer = nn.GroupNorm
 
         self.num_classes = num_classes
         layers: List[nn.Module] = []
@@ -286,7 +318,7 @@ class EfficientNetCla(nn.Module):
                 # adjust stochastic depth probability based on the depth of the stage block
                 sd_prob = stochastic_depth_prob * float(stage_block_id) / total_stage_blocks
 
-                stage.append(block(block_cnf, sd_prob, norm_layer))
+                stage.append(block(block_cnf, sd_prob, norm_layer, norm_groups))
                 stage_block_id += 1
 
             layers.append(nn.Sequential(*stage))
@@ -298,7 +330,8 @@ class EfficientNetCla(nn.Module):
                 self.num_classes,
                 kernel_size=1,
                 norm_layer=norm_layer,
-                activation_layer=nn.SiLU,
+                norm_groups=norm_groups, # None for norm_layer == 'BN'
+                activation_layer=nn.SiLU if self.act_SiLU else None,
             )
         )
 
@@ -331,6 +364,7 @@ class EfficientNetFeature(nn.Module):
         num_classes: int = 1000,
         block: Optional[Callable[..., nn.Module]] = None,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
+        norm_groups: Optional[int] = None,
         **kwargs: Any,
     ) -> None:
         """
@@ -357,8 +391,12 @@ class EfficientNetFeature(nn.Module):
         if block is None:
             block = MBConv
 
-        if norm_layer is None:
+        assert norm_layer is not None, "'norm_layer' must be set to either 'BN' or 'GN'"
+        if norm_layer == 'BN':
             norm_layer = nn.BatchNorm2d
+        elif norm_layer == 'GN':
+            assert norm_groups is not None, "num_groups must be passed when 'norm_layer' is set to 'GN'"
+            norm_layer = nn.GroupNorm
 
         self.stereo = stereo
         layers: List[nn.Module] = []
@@ -386,7 +424,7 @@ class EfficientNetFeature(nn.Module):
                 # adjust stochastic depth probability based on the depth of the stage block
                 sd_prob = stochastic_depth_prob * float(stage_block_id) / total_stage_blocks
 
-                stage.append(block(block_cnf, sd_prob, norm_layer))
+                stage.append(block(block_cnf, sd_prob, norm_layer, norm_groups))
                 stage_block_id += 1
 
             layers.append(nn.Sequential(*stage))
@@ -398,16 +436,16 @@ class EfficientNetFeature(nn.Module):
         self.l4 = layers[4]
         self.feat_channel = 64
         if self.stereo:
-            self.final_conv = nn.Sequential(convbn(288, 288, 5, 1, 2, 1),
+            self.final_conv = nn.Sequential(convgn(288, 288, 5, 1, 2, 1),
                                             nn.ReLU(inplace=True),
-                                            convbn(288, self.feat_channel, 3, 1, 1, 1),
+                                            convgn(288, self.feat_channel, 3, 1, 1, 1),
                                             nn.ReLU(inplace=True),
                                             nn.Conv2d(self.feat_channel, self.feat_channel, kernel_size=1, padding=0,
                                                       stride=1, bias=False))
         else:
-            self.final_conv = nn.Sequential(convbn(256, 128, 5, 1, 2, 1),
+            self.final_conv = nn.Sequential(convgn(256, 128, 5, 1, 2, 1),
                                             nn.ReLU(inplace=True),
-                                            convbn(128, self.feat_channel, 3, 1, 1, 1),
+                                            convgn(128, self.feat_channel, 3, 1, 1, 1),
                                             nn.ReLU(inplace=True),
                                             nn.Conv2d(self.feat_channel, self.feat_channel, kernel_size=1, padding=0, stride=1, bias=False))
 
@@ -449,7 +487,7 @@ class EfficientNetFeature(nn.Module):
         return x
 
 @MODELS.register_module()
-def EfficientNetClassification(inplanes, num_classes, width_mult=1.0, depth_mult=1.0, **kwargs):
+def EfficientNetClassification(inplanes, num_classes, width_mult=1.0, depth_mult=1.0, act_SiLU=True, norm_layer='BN', norm_groups=None, **kwargs):
     width_mult=1.0
     depth_mult=1.0
     # Build inverted residual settings using multipliers
@@ -460,12 +498,12 @@ def EfficientNetClassification(inplanes, num_classes, width_mult=1.0, depth_mult
         bneck_conf(6, 5, 1, 128, num_classes, 2),
         bneck_conf(6, 3, 1, num_classes, num_classes, 2),
     ]
-    model = EfficientNetCla(inverted_residual_setting, num_classes=num_classes, **kwargs)
+    model = EfficientNetCla(inverted_residual_setting, num_classes=num_classes, act_SiLU=act_SiLU, norm_layer=norm_layer, norm_groups=norm_groups, **kwargs)
 
     return model
 
 @MODELS.register_module()
-def EfficientNetFeatureBackbone(stereo=False, width_mult=1.8, depth_mult=2.6, **kwargs):
+def EfficientNetFeatureBackbone(stereo=False, width_mult=1.8, depth_mult=2.6, norm_layer='BN', norm_groups=32, **kwargs):
     width_mult=width_mult
     depth_mult=depth_mult
     # Build inverted residual settings using multipliers
@@ -481,6 +519,8 @@ def EfficientNetFeatureBackbone(stereo=False, width_mult=1.8, depth_mult=2.6, **
     model = EfficientNetFeature(
         stereo=stereo,
         inverted_residual_setting=inverted_residual_setting,
+        norm_layer=norm_layer,
+        norm_groups=norm_groups,
         **kwargs
     )
     return model

@@ -116,8 +116,10 @@ data
 docs/modelzoo_statistics.md
 mmdet/.mim
 work_dirs/
+work_dirs_test*/
+word_dirs_test/
 data/
-
+debug_masks/
 # Pytorch
 *.pth
 *.py~

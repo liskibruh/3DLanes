@@ -135,6 +135,10 @@ class Apollo3D(BaseDetDataset):
         with open(self.ann_file, 'r') as infile:
             for i, line in enumerate(infile):
                 sample = json.loads(line)
+                img_pth = os.path.join(self.img_prefix, sample['img_path'])
+                # skip non-existing images
+                if not os.path.exists(img_pth):
+                    continue
 
                 instances = []
                 for j, inst in enumerate(sample['lanes']):

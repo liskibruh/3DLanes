@@ -79,9 +79,39 @@ class Conv2x(nn.Module):
 
 
 def convbn(in_channels, out_channels, kernel_size, stride, pad, dilation, **kwargs):
-    return nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
-                                   padding=dilation if dilation > 1 else pad, dilation=dilation, bias=False, **kwargs),
-                         nn.BatchNorm2d(out_channels))
+    return nn.Sequential(
+        nn.Conv2d(
+                in_channels, 
+                out_channels, 
+                kernel_size=kernel_size, 
+                stride=stride,
+                padding=dilation if dilation > 1 else pad, 
+                dilation=dilation,
+                bias=False, 
+                **kwargs),
+                
+                nn.BatchNorm2d(out_channels)
+            )
+
+
+def convgn(in_channels, out_channels, kernel_size, stride, pad, dilation, norm_groups=4, **kwargs):
+    return nn.Sequential(
+        nn.Conv2d(
+                in_channels, 
+                out_channels, 
+                kernel_size=kernel_size, 
+                stride=stride,
+                padding=dilation if dilation > 1 else pad, 
+                dilation=dilation,
+                bias=False, 
+                **kwargs),
+                
+                nn.GroupNorm(
+                    num_groups=min(norm_groups, out_channels),
+                    num_channels=out_channels
+                )
+            )
+
 
 def convin(in_channels, out_channels, kernel_size, stride, pad, dilation, **kwargs):
     return nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
@@ -104,7 +134,7 @@ def convbn_3d_group(in_channels, out_channels, groups, kernel_size, stride, pad)
                                    padding=pad, bias=False),
                          nn.BatchNorm3d(out_channels))
 
-def convgn(in_channels, out_channels, kernel_size, stride, pad, dilation):
+def convgn_ori(in_channels, out_channels, kernel_size, stride, pad, dilation):
     return nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
                                    padding=dilation if dilation > 1 else pad, dilation=dilation, bias=False),
                          nn.GroupNorm(4, out_channels))
