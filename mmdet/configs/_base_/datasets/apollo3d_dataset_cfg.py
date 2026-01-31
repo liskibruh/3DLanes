@@ -50,7 +50,10 @@ train_pipeline = [
             grid_res=grid_res
             ),
     dict(type="mmdet.Resize", scale=img_scale),
-    dict(type="mmdet.Normalize", mean=[0.56911952, 0.54184569, 0.4889298], std=[0.16311612, 0.16758122, 0.1713779]),
+    dict(type="mmdet.Normalize", 
+         mean=[0.56911952, 0.54184569, 0.4889298], 
+         std=[0.16311612, 0.16758122, 0.1713779]
+         ),
     dict(type="mmdet.LoadLaneMasks",
             iterations=iterations,
             ),
@@ -71,7 +74,10 @@ val_pipeline = [
             grid_res=grid_res
             ),
     dict(type="mmdet.Resize", scale=img_scale),
-    dict(type="mmdet.Normalize", mean=[0.56911952, 0.54184569, 0.4889298], std=[0.16311612, 0.16758122, 0.1713779]),
+    dict(type="mmdet.Normalize", 
+         mean=[0.56911952, 0.54184569, 0.4889298], 
+         std=[0.16311612, 0.16758122, 0.1713779]
+         ),
     dict(type="mmdet.LoadLaneMasks",
             iterations=iterations,
             ),
@@ -113,6 +119,20 @@ test_dataloader = dict(
         pipeline=val_pipeline,
         backend_args=backend_args 
     )
+)
+
+# test_evaluator = dict(type='mmdet.SaveElePredMetric', 
+#                     save_dir='../mmdet/work_dirs_test/3dlanes_preds',
+#                     vis_dir='../mmdet/work_dirs_test/vis_out/')
+
+test_evaluator = dict(
+    type='mmdet.LaneEval', 
+    mode='2D',                                            # compute '2D' or '3D' lanes metrics. only '2D' works for now
+    dist_thresh=0.5,                                      # dist threshold for matching pred lane to gt lane
+    format_only=False,                                    # just save results, don't evaluate. if True, outfile_prefix must not be None
+    outfile_prefix='../mmdet/work_dirs_test/eval_outs/',  # dir to save the gts and preds txts
+    collect_device='cpu',                                 # might break if not 'cpu'
+    prefix=None                                           # prefix for metric name
 )
 
 # val_evaluator = dict(type='DummyMetric')

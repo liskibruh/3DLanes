@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch.nn import functional as F
 from mmdet.registry import MODELS, TRANSFORMS
@@ -103,7 +104,6 @@ class _3DLanes(BaseDetector):
                 losses.update({'bin_loss': bin_loss})
             
         else:
-            print(F"IN ELSE")
             losses['ele_loss'] = torch.tensor(0.0, requires_grad=True)
             losses['bin_loss'] = torch.tensor(0.0, requires_grad=True)
         
@@ -113,6 +113,15 @@ class _3DLanes(BaseDetector):
         features_left = self.backbone(batch_inputs['img'])
         B, C, H_img, W_img = features_left.shape
         features_left = features_left.reshape(B, C, -1)
+
+        # get vert2cam for each sample
+        batch_vert2cam = []
+        for data_sample in batch_data_samples:
+            assert 'cam2vert' in data_sample.metainfo_keys(), \
+                "missing 'cam2vert' key in data_sample.metainfo_keys()"
+            cam2vert = data_sample.metainfo['cam2vert']
+            vert2cam = np.linalg.inv(cam2vert)
+            batch_vert2cam.append(vert2cam)
 
         proj_index_left = batch_inputs['voxel_proj_index']
         linear_indices = proj_index_left[:, 1, :] * W_img + proj_index_left[:, 0, :]
@@ -133,16 +142,162 @@ class _3DLanes(BaseDetector):
         for i in range(B):
             conf_threshold = 0.4 
             mask = (bin_prob[i] > conf_threshold).float()
-
             masked_ele = decoded_ele[i] * mask
-            masked_ele[mask == 0] = 0.0 
+            masked_ele[mask == 0] = 0.0  # todo: should be set to minimum height value in masked_ele
+            
+            pred_lanes_vert, pred_lanes_cam, SKIP_ = self.extract_lanes_new(masked_ele, mask, \
+                                                                    batch_vert2cam[i],
+                                                                    batch_data_samples[i].metainfo['voxels_info'])
+            if SKIP_:
+                print("[WARNING]: Skipping sample..")
+                continue
+            # plot_on_image(
+            #     pred_lanes=pred_lanes_cam,
+            #     gt_lanes=batch_data_samples[i].gt_lanes_cam, 
+            #     im_pth=batch_data_samples[i].metainfo['img_path'],
+            #     cam_intrin=batch_data_samples[i].metainfo['cam_intrinsic'],
+            #     voxels_info=batch_data_samples[i].metainfo['voxels_info'],
+            #     out_dir="./"
+            #     )
+            
             batch_data_samples[i].pred_3dlanes= {
+                'raw_ele': decoded_ele[i].cpu(),
                 'ele_pred': masked_ele.cpu(),         
-                'bin_prob': bin_prob[i].cpu(),        
-                'raw_ele': decoded_ele[i].cpu()       
+                'bin_prob': bin_prob[i].cpu(),
+                'pred_lanes_vert': pred_lanes_vert,
+                'pred_lanes_cam': pred_lanes_cam,        
             }
 
         return batch_data_samples
+
+    def extract_lanes(self, ele_mask, bin_mask, vert2cam, voxels_info):
+        import scipy.ndimage as ndi
+        from skimage.morphology import skeletonize
+        import matplotlib.pyplot as plt
+    
+        bin_mask = bin_mask.cpu().numpy().astype(np.uint8)
+        # plt.imsave('test_img.png', bin_mask, cmap='gray')
+        bin_mask = ndi.binary_dilation(bin_mask, structure=np.ones((3,1)))
+        bin_mask = skeletonize(bin_mask)
+        labeled, num_lanes = ndi.label(bin_mask, structure=np.ones((3,3)))
+        # print(f'num_lanes: {num_lanes}')
+        lanes_vert, lanes_cam = [], []
+
+        for lane_id in range(1, num_lanes + 1):
+            z_idx, x_idx = np.where(labeled == lane_id)
+
+            if len(z_idx) < 7:   # filtering
+                continue
+
+            H, W = ele_mask.shape[0], ele_mask.shape[1]
+            res_z = voxels_info['grid_res'][2].detach().cpu().numpy()
+            roi_z_min = voxels_info['roi_z'][0].detach().cpu().numpy()
+            res_x = voxels_info['grid_res'][0].detach().cpu().numpy()
+            roi_x_min = voxels_info['roi_x'][0].detach().cpu().numpy()
+        
+            # cld
+            # z = (H - 1 - z_idx) * res_z + roi_z_min + (res_z/2)
+            # x = x_idx * res_x + roi_x_min + (res_x/2)
+
+            # gp
+            x = roi_x_min + (x_idx + 0.5) * res_x
+            z = roi_z_min + (H - 1 - z_idx - 0.5) * res_z
+
+            # standard
+            # z = z_idx * voxels_info['grid_res'][2].detach().cpu().numpy()+ voxels_info['roi_z'][0].detach().cpu().numpy()
+            # x = x_idx * voxels_info['grid_res'][0].detach().cpu().numpy() + voxels_info['roi_x'][0].detach().cpu().numpy()
+            
+            y = ele_mask[z_idx, x_idx].cpu().numpy()
+            y_vert = voxels_info['base_height'] - (y / 100.0) # cam height adjustment, cms -> ms
+
+            lane_vert = np.stack([x, y_vert, z], axis=1)
+            lane_vert = lane_vert[np.argsort(lane_vert[:, 2])] # sort along z
+            lanes_vert.append(lane_vert)
+
+            # vert → cam
+            lane_cam = (vert2cam @ lane_vert.T).T
+            lanes_cam.append(lane_cam)
+
+        return lanes_vert, lanes_cam
+    
+    def extract_lanes_new(self, ele_mask, bin_mask, vert2cam, voxels_info):
+        SKIP_SAMPLE = False
+        import scipy.ndimage as ndi
+        from skimage.morphology import skeletonize
+        from numpy.polynomial.polynomial import polyfit, polyval
+        import matplotlib.pyplot as plt
+    
+        bin_mask = bin_mask.cpu().numpy().astype(np.uint8)
+        # plt.imsave('test_img.png', bin_mask, cmap='gray')
+        bin_mask = ndi.binary_dilation(bin_mask, structure=np.ones((3,1)))
+        bin_mask = skeletonize(bin_mask)
+        labeled, num_lanes = ndi.label(bin_mask, structure=np.ones((3,3)))
+        # print(f'num_lanes: {num_lanes}')
+        lanes_vert, lanes_cam = [], []
+
+        for lane_id in range(1, num_lanes + 1):
+            z_idx, x_idx = np.where(labeled == lane_id)
+
+            if len(z_idx) < 15:   # filtering
+                continue
+
+            lane_points = []
+            for z in np.unique(z_idx):
+                xs = x_idx[z_idx == z]
+
+                if len(xs) == 0:
+                    continue
+
+                x_mean = xs.mean()   # or median
+                lane_points.append((z, x_mean))
+            lane_points = np.array(lane_points)
+
+            z_idx = lane_points[:, 0]
+            x_idx = lane_points[:, 1]
+
+            H, W = ele_mask.shape[0], ele_mask.shape[1]
+            res_z = voxels_info['grid_res'][2].detach().cpu().numpy()
+            roi_z_min = voxels_info['roi_z'][0].detach().cpu().numpy()
+            res_x = voxels_info['grid_res'][0].detach().cpu().numpy()
+            roi_x_min = voxels_info['roi_x'][0].detach().cpu().numpy()
+
+            # gp
+            x = roi_x_min + (x_idx + 0.5) * res_x
+            z = roi_z_min + (H - 1 - z_idx - 0.5) * res_z
+            
+            # cam height adjustment, cms -> ms
+            y = ele_mask[z_idx, x_idx].cpu().numpy()
+            y_vert = voxels_info['base_height'] - (y / 100.0) 
+
+            lane_vert = np.stack([x, y_vert, z], axis=1)
+
+            # smooth lane
+            z_vals = lane_vert[:, 2]
+            x_vals = lane_vert[:, 0]
+
+            coeffs = polyfit(z_vals, x_vals, deg=3)
+            x_smooth = polyval(z_vals, coeffs)
+
+            lane_vert[:, 0] = x_smooth
+            lane_vert = lane_vert[np.argsort(lane_vert[:, 2])] # sort along z
+
+            # flat z assumption (temporary debug)
+            ## the elevation predictions are not good atm
+            ## delete/uncomment the following line for using predicted ele insted of flat
+            # lane_vert[:, 1] = voxels_info['base_height']
+
+            ## alternatively, we can also ignore lanes with large ele variation
+            dy = np.diff(lane_vert[:, 1])
+            if np.sum(np.abs(dy)) > 0.1:
+                SKIP_SAMPLE=True
+
+            lanes_vert.append(lane_vert)
+
+            # vert → cam
+            lane_cam = (vert2cam @ lane_vert.T).T
+            lanes_cam.append(lane_cam)
+
+        return lanes_vert, lanes_cam, SKIP_SAMPLE
 
     def predict_old(self, batch_inputs, batch_data_samples, **kwargs):
         features_left = self.backbone(batch_inputs['img'])
@@ -162,7 +317,6 @@ class _3DLanes(BaseDetector):
 
             ele_pred = self.ele_head.forward(voxel_feat_left)
 
-        print(f'ele_pred.shape: {ele_pred.shape}')
         ele_pred = F.softmax(ele_pred, dim=1)
         ele_pred = torch.sum(ele_pred * self.ele_values, dim=1)
 
@@ -179,3 +333,67 @@ class _3DLanes(BaseDetector):
         """
         features = self.backbone(batch_inputs['img'])
         return features
+
+def plot_on_image(pred_lanes, gt_lanes, im_pth, cam_intrin, voxels_info, out_dir):
+    import os
+    import cv2
+
+    Z_MIN, Z_MAX = voxels_info['roi_z']
+
+    im_pred = cv2.imread(im_pth)
+    im_gt = cv2.imread(im_pth)
+
+    for lane_cam in pred_lanes:
+        if not isinstance(lane_cam, np.ndarray):
+            lane_cam = np.array(lane_cam)
+        # lane shape: (N,3)
+        proj = cam_intrin@lane_cam.T
+        proj = proj.T   # [x1, y1, z1]
+                        # [x2, y2, z2]
+                        # [x3, y3, z3]
+                        # [., ., .,]        (N, 3)
+
+        proj[:, 0]/=proj[:, 2]  # x/z
+        proj[:, 1]/=proj[:, 2]  # y/z
+
+        points_uv = proj[:, :2]
+        points_uv = points_uv.astype(int)
+
+        for i in range(len(points_uv)-1):
+            pt1 = tuple(points_uv[i])
+            pt2 = tuple(points_uv[i+1])
+            cv2.line(im_pred, pt1, pt2, color=(255, 0, 0), thickness=3)
+
+    for lane_cam in gt_lanes:
+        if not isinstance(lane_cam, np.ndarray):
+            lane_cam = np.array(lane_cam)
+        # lane shape: (N,3)
+        valid = (lane_cam[:, 2] >= np.array(Z_MIN)) & (lane_cam[:, 2] <= np.array(Z_MAX))
+        lane_cam = lane_cam[valid]
+
+        proj = cam_intrin@lane_cam.T
+        proj = proj.T   # [x1, y1, z1]
+                        # [x2, y2, z2]
+                        # [x3, y3, z3]
+                        # [., ., .,]        (N, 3)
+
+        proj[:, 0]/=proj[:, 2]  # x/z
+        proj[:, 1]/=proj[:, 2]  # y/z
+
+        points_uv = proj[:, :2]
+        points_uv = points_uv.astype(int)
+
+        for i in range(len(points_uv)-1):
+            pt1 = tuple(points_uv[i])
+            pt2 = tuple(points_uv[i+1])
+            cv2.line(im_gt, pt1, pt2, color=(0, 255, 0), thickness=3)
+
+    im_out = cv2.hconcat([im_pred, im_gt])
+        
+    fname = "".join([im_pth.strip().split('/')[-2], im_pth.strip().split('/')[-1]])
+    out_pth = os.path.join(out_dir, fname)
+    success = cv2.imwrite(out_pth, im_out)
+    if success:
+        print(f"[INFO]: gt and pred lane visualized on image saved at {out_pth}")
+    else:
+        print(f"[WARNING: gt and pred lane visualized on image saving failed!")

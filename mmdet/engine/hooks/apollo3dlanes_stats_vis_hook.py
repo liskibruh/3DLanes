@@ -76,19 +76,17 @@ class SaveVisAndStats(Hook):
 
     def _save_vis(self, ele_pred: np.ndarray, out_path: str):
         h, w = ele_pred.shape
-        Z = np.linspace(self.roi_z[0], self.roi_z[1], h) 
-        X = np.linspace(self.roi_x[0], self.roi_x[1], w)
-
-        # To avoid colorbar skew from zeros
+        Z = np.linspace(self.roi_z[0], self.roi_z[1], h)#[-1] to correct the false vert flip in ele mask?
+        X = np.linspace(self.roi_x[0], self.roi_x[1], w)#[-1] to correct the false vert flip in ele mask?
+        
+        # to avoid colorbar skew from zeros
         valid_ele = ele_pred[ele_pred != 0]
         if valid_ele.numel() > 0:
             vmin, vmax = valid_ele.min(), valid_ele.max()
         else:
             vmin, vmax = -1.0, 1.0
-
-        # ele_max = np.max(ele_pred[ele_pred != 0]) if np.any(ele_pred != 0) else 1.0
-        # ele_min = np.min(ele_pred[ele_pred != 0]) if np.any(ele_pred != 0) else -1.0
-
+        
+        # ele_pred = np.flipud(ele_pred).cpu().numpy() to correct the flase vert flip in ele mask?
         fig, ax = plt.subplots(figsize=(10, 5), dpi=200)
         im = ax.pcolormesh(
             X, Z, ele_pred.cpu().numpy(),
@@ -101,6 +99,6 @@ class SaveVisAndStats(Hook):
         ax.set_title('Elevation Prediction')
         ax.set_xlabel('x (right)')
         ax.set_ylabel('z (forward)')
-        fig.colorbar(im, ax=ax, label='Height (m)')
+        fig.colorbar(im, ax=ax, label='Height (cm)')
         plt.savefig(out_path, bbox_inches='tight')
         plt.close(fig)

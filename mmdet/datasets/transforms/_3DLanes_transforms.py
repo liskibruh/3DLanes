@@ -182,7 +182,7 @@ class LoadLaneMasks(BaseTransform):
         voxels_info = results['voxels_info']
 
         lanes = [inst['lane'] for inst in results['instances']]
-        bin_mask, ele_mask = get_gt_masks(lanes, voxels_info, cam2vert, cam_h, cam_pitch, iterations=self.iterations)
+        bin_mask, ele_mask, gt_lanes_vert = get_gt_masks(lanes, voxels_info, cam2vert, cam_h, cam_pitch, iterations=self.iterations)
         # lanes_on_image(lanes, cam2img, results['img_path'], idx=results.get("sample_idx", 0))
         # save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, results['img_path'], save_dir="debug_masks", idx=results.get("sample_idx", 0))
 
@@ -194,6 +194,8 @@ class LoadLaneMasks(BaseTransform):
 
         results['gt_bin_mask'] = bin_mask
         results['gt_ele_mask'] = ele_mask
+        results['gt_lanes_cam'] = lanes
+        results['gt_lanes_vert'] = gt_lanes_vert
 
         return results
     
@@ -275,11 +277,13 @@ class Pack3DLanesInputs(BaseTransform):
             image metadata plus voxel and camera information.
     """
 
-    def __init__(self,
-                 meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                           'scale_factor', 'flip', 'flip_direction',
-                           'cam_height', 'cam_pitch', 'cam_intrinsic',
-                           'cam2vert', 'ground2cam', 'voxels_info')):
+    def __init__(
+            self,
+            meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
+                    'scale_factor', 'flip', 'flip_direction',
+                    'cam_height', 'cam_pitch', 'cam_intrinsic',
+                    'cam2vert', 'ground2cam', 'voxels_info')
+                    ):
         self.meta_keys = meta_keys
 
     def transform(self, results: dict) -> dict:
@@ -332,6 +336,8 @@ class Pack3DLanesInputs(BaseTransform):
             gt_masks_data['ele_mask'] = ele_mask
 
             data_sample.gt_lane_masks = PixelData(**gt_masks_data)
+            data_sample.gt_lanes_cam = results['gt_lanes_cam'] # lane points in cam coords
+            data_sample.gt_lanes_vert = results['gt_lanes_vert']
             voxel_uv = results['voxels_info']['voxel_uv']
 
             if isinstance(voxel_uv, np.ndarray):
@@ -339,7 +345,7 @@ class Pack3DLanesInputs(BaseTransform):
 
             packed_results['inputs']['voxel_proj_index'] = voxel_uv
 
-        # Pack metadata
+        # pack metadata
         img_meta = {}
         for key in self.meta_keys:
             if key in results:

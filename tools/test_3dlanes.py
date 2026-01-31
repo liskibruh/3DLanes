@@ -18,16 +18,8 @@ runner = Runner(
     test_cfg=cfg.test_cfg,
     test_evaluator=cfg.test_evaluator,
     work_dir=cfg.save_pred_pth,
+    load_from=cfg.load_from,
 )
 
 # run training/test
 runner.test()
-
-# os.makedirs(cfg.save_pred_pth, exist_ok=True)
-# for sample in results:
-#     im_name = sample.metainfo['img_path'].strip().split('/')[0]
-#     ele_pred = sample.pred_3dlanes['ele_pred'].squeeze()
-#     out_pkl_pth = cfg.save_pred_pth + '/' + im_name+'.pkl'
-#     print(out_pkl_pth)
-#     with open(out_pkl_pth, 'wb') as outfile:
-#         pickle.dump(ele_pred, outfile)

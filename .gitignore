@@ -115,11 +115,14 @@ data
 *.log.json
 docs/modelzoo_statistics.md
 mmdet/.mim
+
+work_dir*
 work_dirs/
 work_dirs_test*/
 word_dirs_test/
 data/
 debug_masks/
+gt_and_pred_vis/
 # Pytorch
 *.pth
 *.py~

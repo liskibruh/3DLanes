@@ -29,33 +29,13 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
     # all_x_coords, all_z_coords = [], []
 
     # project and rasterize into grid
+    gt_lanes_cam = []
     for lane_id, lane in enumerate(lanes):
         points_cam = torch.tensor(lane, dtype=torch.float32)  # (N, 3)
-        points_cam = torch.tensor(lane, dtype=torch.float32)
-        # all_x_coords.extend(points_cam[:, 0].tolist())
-        # all_z_coords.extend(points_cam[:, 2].tolist())
-    
-        # if all_x_coords:
-        #     print(f"GT lanes camera coordinates:")
-        #     print(f"  X range: {min(all_x_coords):.1f} to {max(all_x_coords):.1f}")
-        #     print(f"  Z range: {min(all_z_coords):.1f} to {max(all_z_coords):.1f}")
-
-        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Camera Coordinates] \n\ty_values: {points_cam[:, 1]}")
-        # print(f"")
-
         # project to vertical space
         points_vert = (cam2vert @ points_cam.T).T
-        # points_vert = points_cam.clone().detach()
-        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Vertical Coordinates] \n\ty_values: {points_vert[:, 1]}")
-        # print(f"")
         points_vert[:, 1] = (points_vert[:, 1] - cam_h)*100 #cms
-        # points_vert[:, 1] = (cam_h - points_vert[:, 1])
-        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch:  {cam_pitch}, [Vertical Coordinates After Height Addition] \n\ty_values: {points_vert[:, 1]}")
-        # print(f"")
         points_vert[:, 1] = -points_vert[:, 1]      # invert y
-        # print(f"lane_id: {lane_id}, cam_h: {cam_h}, cam_pitch: {cam_pitch}, [Vertical Coordinates After Inversion] \n\ty_values: {points_vert[:, 1]}")
-
-        # print(f"="*64)
 
         # apply ROI mask
         mask = (
@@ -70,6 +50,8 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
 
         if points_roi.shape[0] == 0:
             continue
+
+        gt_lanes_cam.append(points_roi)
 
         x = points_roi[:, 0].numpy()
         y = points_roi[:, 1].numpy()
@@ -97,7 +79,7 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
     if np.any(mask_lane):
         ele_mask[~mask_lane] = np.min(ele_mask[mask_lane])
 
-    return bin_mask.astype(bool), ele_mask
+    return bin_mask.astype(bool), ele_mask, gt_lanes_cam
 
 def save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, im_pth, save_dir="debug_masks", idx=0):
     os.makedirs(save_dir, exist_ok=True)
