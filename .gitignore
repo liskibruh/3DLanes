@@ -123,6 +123,7 @@ word_dirs_test/
 data/
 debug_masks/
 gt_and_pred_vis/
+nohup_*
 
 **/01_create_Geo3DLanes.py
 **/02_create_Geo3dLanes_anno_pkl.py
