@@ -498,8 +498,15 @@ def EfficientNetClassification(inplanes, num_classes, width_mult=1.0, depth_mult
         bneck_conf(6, 5, 1, 128, num_classes, 2),
         bneck_conf(6, 3, 1, num_classes, num_classes, 2),
     ]
-    model = EfficientNetCla(inverted_residual_setting, num_classes=num_classes, act_SiLU=act_SiLU, norm_layer=norm_layer, norm_groups=norm_groups, **kwargs)
-
+    model = EfficientNetCla(
+        inverted_residual_setting, 
+        num_classes=num_classes, 
+        act_SiLU=act_SiLU, 
+        norm_layer=norm_layer, 
+        norm_groups=norm_groups, 
+        **kwargs
+    )
+    
     return model
 
 @MODELS.register_module()
@@ -523,4 +530,5 @@ def EfficientNetFeatureBackbone(stereo=False, width_mult=1.8, depth_mult=2.6, no
         norm_groups=norm_groups,
         **kwargs
     )
+    
     return model

@@ -123,6 +123,12 @@ word_dirs_test/
 data/
 debug_masks/
 gt_and_pred_vis/
+
+**/01_create_Geo3DLanes.py
+**/02_create_Geo3dLanes_anno_pkl.py
+**/03_inspect_geo3dlanes_pkl.py
+**/06_compute_apollo_mean_std.py
+
 # Pytorch
 *.pth
 *.py~

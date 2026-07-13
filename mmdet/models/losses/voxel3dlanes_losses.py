@@ -4,9 +4,9 @@ from torch import nn
 from mmdet.registry import MODELS
 
 @MODELS.register_module()
-class MyLoss(nn.Module):
+class EleLoss(nn.Module):
     def __init__(self, ele_range, voxel_ele_res, cla_res=1):
-        super(MyLoss, self).__init__()
+        super(EleLoss, self).__init__()
         self.ele_range = ele_range*100  # to cm
         if (self.ele_range*20) % (cla_res*10) != 0:
             print('The class interval is improper')

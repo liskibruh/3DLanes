@@ -7,9 +7,9 @@ img_scale = (1920, 1080)
 feat_downscale = 4
 iterations = 0
 base_height=1.786
-y_range= 7 #10
-roi_x= (-10, 10) #(-20,20)
-roi_z=(4, 80) #(4, 125)
+y_range= 7
+roi_x= (-10, 10)
+roi_z=(4, 80)
 grid_res=(0.3, 0.3, 0.5)
 
 train_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/lanes_in_cam/train.json'
@@ -31,15 +31,6 @@ id2class = {'SingleSolid': 0,
             'Imaginary': 7,
             'Other': 8}
 
-train_al_pipeline = [
-    dict(type="Compose", params=compose_params),
-    dict(type="Resize", scale=img_scale),
-    # dict(type="RandomCenterCrop"),
-    dict(type="HorizontalFlip"),
-    dict(type="Mirror"),
-    # dict(type="Perspective")
-]
-
 train_pipeline = [
     dict(type="LoadImageFromFile"), 
     dict(type="mmdet.VoxelGenerator", 
@@ -57,11 +48,7 @@ train_pipeline = [
     dict(type="mmdet.LoadLaneMasks",
             iterations=iterations,
             ),
-    dict(type="mmdet.Pack3DLanesInputs"),  # Custom packing for 3D lanes data
-    # dict(type="mmdet.CropROIimage"),
-    # dict(type="DepthCompltetion") #
-    # dict(type="Resize", scale=img_scale, keep_ratio=True)
-    # dict(type="Alaug", pipeline=train_al_pipeline) #
+    dict(type="mmdet.Pack3DLanesInputs"),
     ]
 
 val_pipeline = [
@@ -121,19 +108,12 @@ test_dataloader = dict(
     )
 )
 
-# test_evaluator = dict(type='mmdet.SaveElePredMetric', 
-#                     save_dir='../mmdet/work_dirs_test/3dlanes_preds',
-#                     vis_dir='../mmdet/work_dirs_test/vis_out/')
-
-test_evaluator = dict(
-    type='mmdet.LaneEval', 
-    mode='2D',                                            # compute '2D' or '3D' lanes metrics. only '2D' works for now
-    dist_thresh=0.5,                                      # dist threshold for matching pred lane to gt lane
-    format_only=False,                                    # just save results, don't evaluate. if True, outfile_prefix must not be None
-    outfile_prefix='../mmdet/work_dirs_test/eval_outs/',  # dir to save the gts and preds txts
-    collect_device='cpu',                                 # might break if not 'cpu'
-    prefix=None                                           # prefix for metric name
-)
-
-# val_evaluator = dict(type='DummyMetric')
-# val_cfg = None
+# test_evaluator = dict(
+#     type='mmdet.LaneEval', 
+#     mode='2D',                                            # compute '2D' or '3D' lanes metrics. only '2D' works for now
+#     dist_thresh=0.5,                                      # dist threshold for matching pred lane to gt lane
+#     format_only=False,                                    # just save results, don't evaluate. if True, outfile_prefix must not be None
+#     outfile_prefix='../mmdet/work_dirs_test/eval_outs/',  # dir to save the gts and preds txts
+#     collect_device='cpu',                                 # might break if not 'cpu'
+#     prefix=None                                           # prefix for metric name
+# )

@@ -1,23 +1,23 @@
 from mmengine.config import read_base
 
 with read_base():
-    from .._base_.datasets.apollo3d_dataset_cfg import *
-    from .._base_.models.apollo3d_model_cfg import *
-    from .._base_.schedules.apollo3d_schedule_cfg import *
-    from .._base_.apollo3d_default_runtime import *
+    from .._base_.datasets.voxel3dlanes_data_cfg import *
+    from .._base_.models.voxel3dlanes_model_cfg import *
+    from .._base_.schedules.voxel3dlanes_schedule_cfg import *
+    from .._base_.voxel3dlanes_default_runtime import *
 
 backend_args = None
 work_dir = '../mmdet/work_dir_temp/'
-save_pred_pth = '../mmdet/work_dirs_test_temp'
-save_stat_pth = '../mmdet/work_dirs_test/per_epoch_stats'
-save_vis_pth = '../mmdet/work_dirs_test/per_epoch_ele_vis'
-save_bin_pth = '../mmdet/work_dirs_test/per_epoch_bin_vis'
+# save_pred_pth = '../mmdet/work_dirs_test_temp'
+# save_stat_pth = '../mmdet/work_dirs_test/per_epoch_stats'
+# save_vis_pth = '../mmdet/work_dirs_test/per_epoch_ele_vis'
+# save_bin_pth = '../mmdet/work_dirs_test/per_epoch_bin_vis'
 load_from = '/data24t_1/owais.tahir/3DLanes/mmdetection/mmdet/work_dir/epoch_60.pth'
 
 base_height=1.786
-y_range= 7 #10
+y_range= 7
 roi_x= (-10, 10)
-roi_z=(4, 80) #(4, 125)
+roi_z=(4, 80)
 grid_res=(0.3, 0.3, 0.5)
 
 feat_channel = 64
@@ -53,7 +53,7 @@ efficientnet_bin = dict(
 )
 
 model = dict(
-    type='mmdet._3DLanes',
+    type='mmdet.Voxel3DLanes',
     backbone=dict(
         type='mmdet.EfficientNetFeatureBackbone',
         stereo=False,
@@ -87,21 +87,11 @@ model = dict(
         eff_cla=efficientnet_cla
     ),
     loss_func = dict(
-        type='mmdet.MyLoss',
+        type='mmdet.EleLoss',
         ele_range=y_range,
         voxel_ele_res=grid_res[1],
         cla_res=cla_res
     ),
-    # bin_loss = dict(
-    #     type='mmdet.CrossEntropyLoss',
-    #     use_sigmoid=True,  # BCEWithLogits
-    #     use_mask=False,
-    #     reduction='mean',
-    #     # class_weight=[1.0, 10.0], # high weight for lane pixels, addressing class imbalance (background > foreground)
-    #     loss_weight=1.0,
-    #     ignore_index=None,
-    #     avg_non_ignore=False
-    # ),
     bin_loss = dict(
         type='mmdet.FocalLoss',
         use_sigmoid=True,
@@ -117,14 +107,12 @@ model = dict(
     ele_range = y_range
 )
 
-# custom_hooks = [
-#     dict(
-#         type='mmdet.SaveVisAndStats',
-#         stat_out_dir=save_stat_pth,
-#         vis_out_dir=save_vis_pth,
-#         bin_out_dir=save_bin_pth,
-#         num_samples=1,
-#         roi_x=roi_x,
-#         roi_z=roi_z
-#     )
-# ]
+test_evaluator = dict(
+    type='mmdet.LaneEval3D', 
+    mode='3D',                                            # compute '2D' or '3D' lanes metrics. only '2D' works for now
+    dist_thresh=0.5,                                      # dist threshold for matching pred lane to gt lane
+    format_only=False,                                    # just save results, don't evaluate. if True, outfile_prefix must not be None
+    outfile_prefix='../mmdet/work_dirs_test/eval_outs/',  # dir to save the gts and preds txts
+    collect_device='cpu',                                 # might break if not 'cpu'
+    prefix=None                                           # prefix for metric name
+)

@@ -29,7 +29,7 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
     # all_x_coords, all_z_coords = [], []
 
     # project and rasterize into grid
-    gt_lanes_cam = []
+    gt_lanes_vert = []
     for lane_id, lane in enumerate(lanes):
         points_cam = torch.tensor(lane, dtype=torch.float32)  # (N, 3)
         # project to vertical space
@@ -51,7 +51,7 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
         if points_roi.shape[0] == 0:
             continue
 
-        gt_lanes_cam.append(points_roi)
+        gt_lanes_vert.append(points_roi)
 
         x = points_roi[:, 0].numpy()
         y = points_roi[:, 1].numpy()
@@ -79,7 +79,7 @@ def get_gt_masks(lanes: list, voxels_info: dict, cam2vert: torch.Tensor, cam_h: 
     if np.any(mask_lane):
         ele_mask[~mask_lane] = np.min(ele_mask[mask_lane])
 
-    return bin_mask.astype(bool), ele_mask, gt_lanes_cam
+    return bin_mask.astype(bool), ele_mask, gt_lanes_vert
 
 def save_masks(lanes, cam2img, bin_mask, ele_mask, voxels_info, im_pth, save_dir="debug_masks", idx=0):
     os.makedirs(save_dir, exist_ok=True)
