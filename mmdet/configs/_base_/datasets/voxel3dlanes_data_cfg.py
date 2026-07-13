@@ -1,4 +1,3 @@
-data_root = 'data/Apollo_Sim_3D_Lane_Release'
 dataset_type = 'mmdet.Apollo3D'
 
 
@@ -12,10 +11,11 @@ roi_x= (-10, 10)
 roi_z=(4, 80)
 grid_res=(0.3, 0.3, 0.5)
 
-train_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/lanes_in_cam/train.json'
-val_ann_file = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/data_splits/lanes_in_cam/val.json'
+data_root = './data/Apollo_Sim_3D_Lane_Release'
+train_ann_file = 'data_splits/lanes_in_cam/train.json'
+val_ann_file = 'data_splits/lanes_in_cam/val.json'
 
-img_prefix = '/data24t_1/owais.tahir/3DLanes/mmdetection/data/Apollo_Sim_3D_Lane_Release/images/'
+img_prefix = './data/Apollo_Sim_3D_Lane_Release/images/'
 
 compose_params = dict(bboxes=False, keypoints=True, masks=True)
 

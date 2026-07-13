@@ -38,9 +38,9 @@ class Apollo3D(BaseDetDataset):
         self.img_prefix = img_prefix
         self.id2class = id2class
         self.feat_downscale = feat_downscale
-
+        
         super().__init__(ann_file=ann_file, **kwargs)
-
+    
     def build_ground2cam(self, cam_pitch: float, cam_height: float) -> np.ndarray:
         """
         Construct ground-to-camera extrinsic matrix following Apollo's convention.
@@ -83,28 +83,9 @@ class Apollo3D(BaseDetDataset):
         extrinsic[:3, :3] = R # R
         extrinsic[:3, 3:] = R @ T # change this to extrinsic[:3, 3:] =  T for ground2cam
         return extrinsic
-    
+
     def build_cam2vert(self, cam_pitch: float, cam_height: float) -> np.ndarray:
-        ########   calculate the euler angles of the camera (relative to local ENU coord)   ########
-        # [cam_pitch, roll_cam, _] = dataset.matrix2euler(l2c_calib_cur['R'] @ np.linalg.inv(R_cur2enu))
-        # cam_pitch -= 1.5708  # pi/2
-        R_X = np.array(
-            [[1, 0, 0], [0, np.cos(cam_pitch), np.sin(cam_pitch)], [0, -np.sin(cam_pitch), np.cos(cam_pitch)]],
-            dtype=np.float32)
 
-        # T = np.array([0, cam_height, 0], dtype=np.float64).reshape(3, 1) # we are not projecting to road plane, just transforming from cam to vert. so only rotation, no translation
-
-        R_cam2vert = R_X  # the rotation matrix from the current camera coord to the vertical status
-
-        extrinsic = np.eye(3, dtype=np.float64)
-        extrinsic[:3, :3] = R_cam2vert
-        # extrinsic[:3, 3:] = R_cam2vert @ T
-
-        return extrinsic
-
-    def build_cam2vert_new(self, cam_pitch: float, cam_height: float) -> np.ndarray:
-        # rotation around X-axis by -(pi/2 + cam_pitch)
-        # theta = -cam_pitch
         theta = cam_pitch
         R_X = np.array([
             [1, 0, 0],
@@ -114,21 +95,8 @@ class Apollo3D(BaseDetDataset):
 
         extrinsic = np.eye(3, dtype=np.float64)
         extrinsic[:3, :3] = R_X
+        
         return extrinsic
-
-    def matrix2euler(self, m):
-        # order='XYZ'
-        d = np.clip
-        m = m.reshape(-1)
-        a, f, g, k, l, n, e = m[0], m[1], m[2], m[4], m[5], m[7], m[8]
-        y = np.arcsin(d(g, -1, 1))
-        if 0.99999 > np.abs(g):
-            x = np.arctan2(- l, e)
-            z = np.arctan2(- f, a)
-        else:
-            x = np.arctan2(n, k)
-            z = 0
-        return np.array([x, y, z], dtype=np.float32)
 
     def load_data_list(self):
         data_list = []
@@ -144,17 +112,13 @@ class Apollo3D(BaseDetDataset):
                 for j, inst in enumerate(sample['lanes']):
                     instance = {}
                     instance['label'] = self.id2class[sample['labels'][j]]
-                    # todo:
-                    # instance['label'] = self.id2color[sample['colors'][i]]
-                    # instance['width'] = self.id2color[sample['widths'][i]]
                     instance['lane'] = inst
                     instances.append(instance)
 
                 ground2cam = self.build_ground2cam(
                     sample['cam_pitch'], sample['cam_height'])
-                cam2vert = self.build_cam2vert_new(
+                cam2vert = self.build_cam2vert(
                     sample['cam_pitch'], sample['cam_height'])
-                # cam2vert = self.build_cam2vert(sample['cam_pitch'], sample['cam_height'])
                 
                 cam_intrinsic = self.METAINFO['cam_intrinsic'].copy()
                 feat_intrinsic = self.METAINFO['cam_intrinsic'].copy()
@@ -180,8 +144,3 @@ class Apollo3D(BaseDetDataset):
                 )
 
         return data_list
-
-    # def parse_data_info(self, raw_info):
-    #     data_info = raw_info.copy()
-    #     data_info['cam_intrinsic'] = self.metainfo['camera_intrinsic']
-    #     return data_info

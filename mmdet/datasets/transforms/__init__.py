@@ -23,7 +23,7 @@ from .transforms import (Albu, CachedMixUp, CachedMosaic, CopyPaste, CutOut,
                          RandomFlip, RandomShift, Resize, ResizeShortestEdge,
                          SegRescale, YOLOXHSVRandomAug)
 from .wrappers import MultiBranch, ProposalBroadcaster, RandomOrder
-from .voxel3dlanes_transforms import LoadLaneMasks, VoxelGenerator, CropROIimage, Pack3DLanesInputs
+from .voxel3dlanes_transforms import LoadLaneMasks, VoxelGenerator, Pack3DLanesInputs
 
 __all__ = [
     'PackDetInputs', 'ToTensor', 'ImageToTensor', 'Transpose',
@@ -43,5 +43,5 @@ __all__ = [
     'PackTrackInputs', 'PackReIDInputs', 'FixScaleResize',
     'ResizeShortestEdge', 'GTBoxSubOne_GLIP', 'RandomFlip_GLIP',
     'RandomSamplingNegPos', 'LoadTextAnnotations', 'LoadLaneMasks',
-    'VoxelGenerator', 'CropROIimage', 'Pack3DLanesInputs'
+    'VoxelGenerator', 'Pack3DLanesInputs'
 ]

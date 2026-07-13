@@ -7,12 +7,10 @@ with read_base():
     from .._base_.voxel3dlanes_default_runtime import *
 
 backend_args = None
-work_dir = '../mmdet/work_dir_temp/'
-# save_pred_pth = '../mmdet/work_dirs_test_temp'
-# save_stat_pth = '../mmdet/work_dirs_test/per_epoch_stats'
-# save_vis_pth = '../mmdet/work_dirs_test/per_epoch_ele_vis'
-# save_bin_pth = '../mmdet/work_dirs_test/per_epoch_bin_vis'
-load_from = '/data24t_1/owais.tahir/3DLanes/mmdetection/mmdet/work_dir/epoch_60.pth'
+
+work_dir = '../mmdet/work_dir_temp/'                    # where to store training logs and data
+save_pred_pth = '../mmdet/work_dirs_test_temp'          # where to store evaluation results; this functionality is not impelemented yet, will be added soon
+load_from = './mmdet/work_dir/epoch_60_adamw_ori.pth'   # pretrained checkpoint path
 
 base_height=1.786
 y_range= 7
@@ -80,7 +78,6 @@ model = dict(
         roi_z=roi_z,
         grid_res=grid_res,
         y_range=y_range,
-        # cla_res=cla_res,
         num_classes=num_classes,
         channel_reshaped=channel_reshaped,
         inplanes=inplanes,
